@@ -24,13 +24,9 @@ import gcsUploadIcon from '../../style/icons/gcs_upload_icon.svg';
 import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
 import { TitleWidget } from '../controls/SidePanelTitleWidget';
-
+import { authApi, login, toastifyCustomStyle } from '../utils/utils';
 import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-
-import {
-  toastifyCustomStyle,
-} from '../utils/utils';
+import signinGoogleIcon from '../../style/icons/signin_google_icon.svg';
 
 const iconGCSNewFolder = new LabIcon({
   name: 'gcs-toolbar:gcs-folder-new-icon',
@@ -39,6 +35,11 @@ const iconGCSNewFolder = new LabIcon({
 const iconGCSUpload = new LabIcon({
   name: 'gcs-toolbar:gcs-upload-icon',
   svgstr: gcsUploadIcon
+});
+
+const IconsigninGoogle = new LabIcon({
+  name: 'launcher:signin_google_icon',
+  svgstr: signinGoogleIcon
 });
 
 const debounce = (func: any, delay: number) => {
@@ -50,9 +51,12 @@ const debounce = (func: any, delay: number) => {
     }, delay);
   };
 };
+
 export class GcsBrowserWidget extends Widget {
-  private browser: FileBrowser;
-  private fileInput: HTMLInputElement;
+  private browser!: FileBrowser;
+  private fileInput!: HTMLInputElement;
+  private drive: GCSDrive;
+  private fileBrowserFactory: IFileBrowserFactory;
 
   // Function to trigger file input dialog when the upload button is clicked
   private onUploadButtonClick = () => {
@@ -61,7 +65,7 @@ export class GcsBrowserWidget extends Widget {
     } else {
       showDialog({
         title: 'Upload Error',
-        body: 'Files cannot be uploaded outside of a bucket.',
+        body: 'Uploading files at bucket level is not allowed',
         buttons: [Dialog.okButton()]
       });
     }
@@ -73,7 +77,7 @@ export class GcsBrowserWidget extends Widget {
     } else {
       showDialog({
         title: 'Create Bucket Error',
-        body: 'Folders cannot be created outside of a bucket.',
+        body: 'Please use console to create new bucket',
         buttons: [Dialog.okButton()]
       });
     }
@@ -114,9 +118,13 @@ export class GcsBrowserWidget extends Widget {
               title: 'Upload files',
               body:
                 file.name +
-                ' already exists' +
-                ', Do you want to overwrite?',
-              buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Overwrite' })]
+                ' already exists in ' +
+                path.bucket +
+                ', Do you want to overwrite the file?',
+              buttons: [
+                Dialog.okButton({ label: 'Overwrite' }),
+                Dialog.cancelButton()
+              ]
             });
 
             if (result.button.accept) {
@@ -124,7 +132,7 @@ export class GcsBrowserWidget extends Widget {
                 bucket: path.bucket,
                 path: filePath,
                 contents: reader.result as string, // assuming contents is a string
-                upload: false,
+                upload: false
               });
               toast.success(
                 `${file.name} overwritten successfully.`,
@@ -136,7 +144,7 @@ export class GcsBrowserWidget extends Widget {
               bucket: path.bucket,
               path: filePath,
               contents: reader.result as string, // assuming contents is a string
-              upload: true,
+              upload: true
             });
             toast.success(
               `${file.name} uploaded successfully.`,
@@ -153,35 +161,109 @@ export class GcsBrowserWidget extends Widget {
         reader.readAsText(file);
       });
     }
-
   };
 
   private filterFilesByName = async (filterValue: string) => {
     this.browser.model.refresh();
   };
 
-  constructor(
-    private drive: GCSDrive,
-    private fileBrowserFactory: IFileBrowserFactory
-  ) {
+  constructor(drive: GCSDrive, fileBrowserFactory: IFileBrowserFactory) {
     super();
-    this.browser = this.fileBrowserFactory.createFileBrowser(
-      'dataproc-jupyter-plugin:gcsBrowser',
-      {
-        driveName: this.drive.name
-      }
-    );
+    this.drive = drive;
+    this.fileBrowserFactory = fileBrowserFactory;
+
+    // Create an empty panel layout initially
     this.layout = new PanelLayout();
     this.node.style.height = '100%';
     this.node.style.display = 'flex';
     this.node.style.flexDirection = 'column';
 
-    this.browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
-    this.browser.node.style.flexShrink = '1';
-    this.browser.node.style.flexGrow = '1';
-
+    // Add title widget initially
     (this.layout as PanelLayout).addWidget(
       new TitleWidget('Google Cloud Storage', true)
+    );
+
+    // Check configuration and initialize appropriately
+    this.initialize();
+  }
+
+  private async initialize(): Promise<void> {
+    try {
+      const credentials = await authApi();
+      const errorMessageNode = document.createElement('div');
+      errorMessageNode.className = 'gcs-error-message';
+      errorMessageNode.style.textAlign = 'center';
+      errorMessageNode.style.marginTop = '20px';
+      errorMessageNode.style.alignItems = 'center';
+      errorMessageNode.style.justifyContent = 'center';
+      errorMessageNode.style.display = 'flex';
+      errorMessageNode.style.flexDirection = 'column';
+      errorMessageNode.style.fontSize = '15px';
+      errorMessageNode.style.fontWeight = '600';
+      errorMessageNode.style.padding = '11px';
+
+      if (credentials) {
+        if (credentials.config_error === 1) {
+          // Config error
+          errorMessageNode.textContent =
+            'Please configure gcloud with account, project-id and region.';
+          this.node.appendChild(errorMessageNode);
+          return;
+        }
+
+        if (credentials.login_error === 1) {
+          // Login error
+          const loginContainer = document.createElement('div');
+          loginContainer.style.display = 'flex';
+          loginContainer.style.flexDirection = 'column';
+          loginContainer.style.alignItems = 'center';
+          loginContainer.style.marginTop = '20px';
+          loginContainer.style.justifyContent = 'center';
+          loginContainer.style.fontSize = '15px';
+          loginContainer.style.fontWeight = '600';
+          loginContainer.style.padding = '11px';
+
+          const loginText = document.createElement('div');
+          loginText.className = 'login-error';
+          loginText.textContent = 'Please login to continue';
+
+          const loginButton = document.createElement('div');
+          loginButton.className = 'signin-google-icon logo-alignment-style';
+          loginButton.setAttribute('role', 'button');
+          loginButton.style.cursor = 'pointer';
+
+          loginButton.onclick = () => {
+            // Assuming `login` is globally available
+            login((value: boolean | ((prevState: boolean) => boolean)) => {
+              if (typeof value === 'boolean' && !value) {
+                // Retry initialization after successful login
+                this.initialize();
+              }
+            });
+          };
+
+          const googleIconContainer = document.createElement('div');
+          googleIconContainer.style.marginTop = '20px';
+          googleIconContainer.innerHTML = IconsigninGoogle.svgstr;
+          loginButton.appendChild(googleIconContainer);
+          loginContainer.appendChild(loginText);
+          loginContainer.appendChild(loginButton);
+          this.node.appendChild(loginContainer);
+          return;
+        }
+        this.setupBrowserWidget();
+      }
+    } catch (error) {
+      console.error('Error during initialization:', error);
+    }
+  }
+
+  private setupBrowserWidget(): void {
+    this.browser = this.fileBrowserFactory.createFileBrowser(
+      'gcs-jupyter-plugin:gcsBrowser',
+      {
+        driveName: this.drive.name
+      }
     );
 
     let filterInput = document.createElement('input');
@@ -189,8 +271,6 @@ export class GcsBrowserWidget extends Widget {
     filterInput.className = 'filter-search-gcs';
     filterInput.type = 'text';
     filterInput.placeholder = 'Filter by Name';
-
-    // Debounce the filterFilesByName function with a delay of 300 milliseconds
     const debouncedFilter = debounce(this.filterFilesByName, 300);
 
     filterInput.addEventListener('input', event => {
@@ -202,9 +282,6 @@ export class GcsBrowserWidget extends Widget {
       // Call a function to filter files based on filterValue
       debouncedFilter(filterValue);
     });
-
-    // Listen for changes in the FileBrowser's path
-    this.browser.model.pathChanged.connect(this.onPathChanged, this);
 
     this.browser.showFileCheckboxes = false;
     (this.layout as PanelLayout).addWidget(this.browser);
@@ -242,20 +319,12 @@ export class GcsBrowserWidget extends Widget {
   }
 
   dispose() {
-    this.browser.model.pathChanged.disconnect(this.onPathChanged, this);
-    this.browser.dispose();
-    this.fileInput.removeEventListener('change', this.handleFileUpload);
+    if (this.browser) {
+      this.browser.dispose();
+    }
+    if (this.fileInput) {
+      this.fileInput.removeEventListener('change', this.handleFileUpload);
+    }
     super.dispose();
   }
-
-  private onPathChanged = () => {
-    // Clear the filter input value when the path changes
-    const filterInputElement = document.getElementById('filter-buckets-objects') as HTMLInputElement | null;
-    if (filterInputElement) {
-      filterInputElement.value = '';
-      //@ts-ignore
-      filterInputElement.removeAttribute('value'); // Also remove the attribute for consistency
-      this.filterFilesByName(''); // Optionally refresh the content with an empty filter
-    }
-  };
 }
