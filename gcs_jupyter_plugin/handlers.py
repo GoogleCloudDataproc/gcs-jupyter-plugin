@@ -1,4 +1,5 @@
 import json
+import subprocess
 
 from jupyter_server.base.handlers import APIHandler
 from jupyter_server.utils import url_path_join
@@ -16,7 +17,19 @@ from gcs_jupyter_plugin.controllers.gcs import (
     DownloadFileController,
 )
 
-
+class LoginHandler(APIHandler):
+    @tornado.web.authenticated
+    async def post(self):
+        cmd = "gcloud auth login"
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        )
+        output, _ = process.communicate()
+        # Check if the authentication was successful
+        if process.returncode == 0:
+            self.finish({"login": "SUCCEEDED"})
+        else:
+            self.finish({"login": "FAILED"})
 class CredentialsHandler(APIHandler):
     # The following decorator should be present on all verb methods (head, get, post,
     # patch, put, delete, options) to ensure only authorized user can request the
@@ -62,6 +75,7 @@ def setup_handlers(web_app):
         "credentials": CredentialsHandler,
         "getGcpServiceUrls": UrlHandler,
         "log": LogHandler,
+        "login": LoginHandler,
         "api/storage/listBuckets": ListBucketsController,
         "api/storage/listFiles": ListFilesController,
         "api/storage/loadFile": LoadFileController,
