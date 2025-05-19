@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 import { requestAPI } from '../handler';
 import { ToastOptions, toast } from 'react-toastify';
 
@@ -38,8 +37,7 @@ export interface IAuthCredentials {
   login_error?: number;
 }
 
-export const authApi = async (
-): Promise<IAuthCredentials | undefined> => {
+export const authApi = async (): Promise<IAuthCredentials | undefined> => {
   try {
     const data = await requestAPI('credentials');
     if (typeof data === 'object' && data !== null) {
@@ -50,7 +48,7 @@ export const authApi = async (
         config_error: (data as { config_error: number }).config_error,
         login_error: (data as { login_error: number }).login_error
       };
-      return credentials
+      return credentials;
     }
   } catch (reason) {
     console.error(`Error on GET credentials.\n${reason}`);
@@ -83,9 +81,6 @@ export const login = async (
  * @param queryParams
  * @returns a promise of the fetch result
  */
-
-
-
 
 /**
  * Helper method that wraps fetch and logs the request uri and status codes to

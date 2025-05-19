@@ -17,6 +17,7 @@ from gcs_jupyter_plugin.controllers.gcs import (
     DownloadFileController,
 )
 
+
 class LoginHandler(APIHandler):
     @tornado.web.authenticated
     async def post(self):
@@ -30,6 +31,8 @@ class LoginHandler(APIHandler):
             self.finish({"login": "SUCCEEDED"})
         else:
             self.finish({"login": "FAILED"})
+
+
 class CredentialsHandler(APIHandler):
     # The following decorator should be present on all verb methods (head, get, post,
     # patch, put, delete, options) to ensure only authorized user can request the

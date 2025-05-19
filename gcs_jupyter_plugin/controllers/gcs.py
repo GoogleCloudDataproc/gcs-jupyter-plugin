@@ -24,7 +24,6 @@ from gcs_jupyter_plugin import credentials
 from gcs_jupyter_plugin.services import gcs
 
 
-
 class ListBucketsController(APIHandler):
     @tornado.web.authenticated
     async def get(self):
@@ -41,6 +40,7 @@ class ListBucketsController(APIHandler):
             self.log.exception("Error fetching datasets.")
             self.finish({"error": str(e)})
 
+
 class ListFilesController(APIHandler):
     @tornado.web.authenticated
     async def get(self):
@@ -52,7 +52,7 @@ class ListFilesController(APIHandler):
                     await credentials.get_cached(), self.log, client_session
                 )
 
-                files = await client.list_files(bucket,prefix)
+                files = await client.list_files(bucket, prefix)
             self.finish(json.dumps(files))
         except Exception as e:
             self.log.exception("Error fetching datasets")
@@ -104,7 +104,7 @@ class SaveFileController(APIHandler):
             # Use the client to upload the content
             storage_client = gcs.Client(await credentials.get_cached(), self.log, None)
             result = await storage_client.save_content(
-                bucket, destination_path, content, uploadFlag 
+                bucket, destination_path, content, uploadFlag
             )
 
             if isinstance(result, dict) and "error" in result:
@@ -132,7 +132,7 @@ class LoadFileController(APIHandler):
                     await credentials.get_cached(), self.log, client_session
                 )
 
-                file = await client.get_file(bucket,file_path, format)
+                file = await client.get_file(bucket, file_path, format)
 
             # If .ipynb file, then sanitizing
             if file_path.endswith(".ipynb") and format == "json":
@@ -145,8 +145,6 @@ class LoadFileController(APIHandler):
         except Exception as e:
             self.log.exception("Error fetching datasets")
             self.finish({"error": str(e)})
-
-        
 
 
 class DeleteFileController(APIHandler):
@@ -184,10 +182,12 @@ class DeleteFileController(APIHandler):
                     return
 
                 # Set correct success status for delete operation
-                self.finish({
-                    "message" : "File / Folder Successfully deleted",
-                    "status" : 200,
-                })
+                self.finish(
+                    {
+                        "message": "File / Folder Successfully deleted",
+                        "status": 200,
+                    }
+                )
         except Exception as e:
             self.log.exception("Error deleting file")
             self.set_status(500)
@@ -254,10 +254,12 @@ class DownloadFileController(APIHandler):
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
-                file_content = await client.download_file(bucket,file_path, name, format)
+                file_content = await client.download_file(
+                    bucket, file_path, name, format
+                )
 
                 self.finish(file_content)
-                
+
                 # if format == 'text':
                 #     self.set_header('Content-Type', 'text/plain')
                 #     self.set_header('Content-Disposition', f'attachment; filename="{name}"')
@@ -276,7 +278,6 @@ class DownloadFileController(APIHandler):
                 #     self.set_header('Content-Disposition', f'attachment; filename="{name}"')
                 #     self.finish(file_content)
 
-            
         except Exception as e:
             self.log.exception("Error fetching datasets")
             self.finish({"error": str(e)})
