@@ -72,7 +72,7 @@ export class GcsBrowserWidget extends Widget {
       this.browser.createNewDirectory();
     } else {
       showDialog({
-        title: 'Create Bucket Error',
+        title: 'Create Folder Error',
         body: 'Folders cannot be created outside of a bucket.',
         buttons: [Dialog.okButton()]
       });
@@ -114,8 +114,7 @@ export class GcsBrowserWidget extends Widget {
               title: 'Upload files',
               body:
                 file.name +
-                ' already exists' +
-                ', Do you want to overwrite?',
+                ' already exists. Do you want to overwrite?',
               buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Overwrite' })]
             });
 

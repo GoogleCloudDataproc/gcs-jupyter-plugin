@@ -55,7 +55,7 @@ export class GCSDrive implements Contents.IDrive {
   get fileChanged(): ISignal<this, Contents.IChangedArgs> {
     return this._fileChanged;
   }
-  // private _currentPrefix = '';
+  
   readonly serverSettings: ServerConnection.ISettings;
 
   get name() {
@@ -101,7 +101,7 @@ export class GCSDrive implements Contents.IDrive {
         return await this.getFile(localPath, options);
       } catch (e) {
         // If it's a 404, maybe it was an (empty) directory after all.
-        // fall out and return the directory IModel.
+        return directory;
       }
     }
     return directory;
@@ -258,11 +258,11 @@ export class GCSDrive implements Contents.IDrive {
       if (options.type === 'directory'){
         console.error("Creating Folders at bucket level is not allowed. Note : Please use console to create new bucket :", options);
         await showDialog({
-          title: 'Create Bucket Error',
+          title: 'Create Folder Error',
           body: 'Folders cannot be created outside of a bucket.',
           buttons: [Dialog.okButton()]
         });
-        return DIRECTORY_IMODEL;
+        return Promise.reject();
       }
       else if (options.type === 'file'){
         console.error("Creating files at bucket level is not allowed :", options);
@@ -271,7 +271,7 @@ export class GCSDrive implements Contents.IDrive {
           body: 'Files cannot be created outside of a bucket.',
           buttons: [Dialog.okButton()]
         });
-        return DIRECTORY_IMODEL;
+        return Promise.reject();
       }
       else if (options.type === 'notebook'){
         console.error("Creating notebooks at bucket level is not allowed :", options);
@@ -280,7 +280,7 @@ export class GCSDrive implements Contents.IDrive {
           body: 'Notebooks cannot be created outside of a bucket.',
           buttons: [Dialog.okButton()]
         });
-        return DIRECTORY_IMODEL;
+        return Promise.reject();
       }else{
         console.error("Unsupported creation type :", options.type);
         await showDialog({
@@ -288,7 +288,7 @@ export class GCSDrive implements Contents.IDrive {
           body: 'Unsupported creation type :' + options.type,
           buttons: [Dialog.okButton()]
         });
-        return DIRECTORY_IMODEL;
+        return Promise.reject();
       }
     }
 
@@ -540,6 +540,7 @@ export class GCSDrive implements Contents.IDrive {
     localPath: string,
     options?: Partial<Contents.IModel>
   ): Promise<Contents.IModel> {
+
     const path = GcsService.pathParser(localPath);
     const content =
       options?.format == 'json'
@@ -550,10 +551,12 @@ export class GCSDrive implements Contents.IDrive {
       path: path.path,
       contents: content
     });
+    
     toast.success(
       `${path.name} saved successfully.`,
       toastifyCustomStyle
     );
+    
     return {
       type: 'file',
       path: localPath,
