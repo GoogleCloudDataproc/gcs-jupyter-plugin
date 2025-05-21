@@ -20,7 +20,6 @@ import { ToastOptions, toast } from 'react-toastify';
 
 import { DataprocLoggingService } from './loggingService';
 import { STATUS_SUCCESS } from './const';
-// import { showLoginDialog } from './loginPopup';
 
 export const toastifyCustomStyle: ToastOptions<{}> = {
   hideProgressBar: true,
