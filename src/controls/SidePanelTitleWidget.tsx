@@ -16,23 +16,14 @@
  */
 import React from 'react';
 import { ReactWidget } from '@jupyterlab/apputils';
-import { LabIcon } from '@jupyterlab/ui-components';
-import refreshDatasetIcon from '../../style/icons/refresh_icon.svg';
-
-const iconRefreshDatasetExplorer = new LabIcon({
-  name: 'launcher:refresh-dataset-explorer-icon',
-  svgstr: refreshDatasetIcon
-});
 
 export const TitleComponent = function ({
   titleStr,
   isPreview,
-  getBigQueryProjects,
   styles
 }: {
   titleStr: string;
   isPreview: boolean;
-  getBigQueryProjects?: () => void;
   styles?: React.CSSProperties;
 }) {
   return (
@@ -66,18 +57,6 @@ export const TitleComponent = function ({
             </span>
           ) : null}
         </div>
-        {getBigQueryProjects ? (
-          <span
-            onClick={() => getBigQueryProjects()}
-            aria-label="dataset-explorer-refresh"
-            className="dataset-explorer-refresh"
-          >
-            <iconRefreshDatasetExplorer.react
-              tag="div"
-              className="icon-white logo-alignment-style"
-            />
-          </span>
-        ) : null}
       </div>
     </div>
   );

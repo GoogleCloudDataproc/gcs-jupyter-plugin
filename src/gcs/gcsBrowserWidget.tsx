@@ -53,6 +53,8 @@ const debounce = (func: any, delay: number) => {
 export class GcsBrowserWidget extends Widget {
   private browser: FileBrowser;
   private fileInput: HTMLInputElement;
+  private newFolder: ToolbarButton;
+  private gcsUpload: ToolbarButton;
 
   // Function to trigger file input dialog when the upload button is clicked
   private onUploadButtonClick = () => {
@@ -61,7 +63,7 @@ export class GcsBrowserWidget extends Widget {
     } else {
       showDialog({
         title: 'Upload Error',
-        body: 'Uploading files at bucket level is not allowed.',
+        body: 'Files cannot be uploaded outside of a bucket.',
         buttons: [Dialog.okButton()]
       });
     }
@@ -72,8 +74,8 @@ export class GcsBrowserWidget extends Widget {
       this.browser.createNewDirectory();
     } else {
       showDialog({
-        title: 'Create Bucket Error',
-        body: 'Please use Google Cloud Console to create new bucket.',
+        title: 'Create Folder Error',
+        body: 'Folders cannot be created outside of a bucket.',
         buttons: [Dialog.okButton()]
       });
     }
@@ -114,10 +116,8 @@ export class GcsBrowserWidget extends Widget {
               title: 'Upload files',
               body:
                 file.name +
-                ' already exists in ' +
-                path.bucket +
-                ', Do you want to overwrite the file?',
-              buttons: [Dialog.okButton({ label: 'Overwrite' }), Dialog.cancelButton()]
+                ' already exists. Do you want to overwrite?',
+              buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Overwrite' })]
             });
 
             if (result.button.accept) {
@@ -182,7 +182,7 @@ export class GcsBrowserWidget extends Widget {
     this.browser.node.style.flexGrow = '1';
 
     (this.layout as PanelLayout).addWidget(
-      new TitleWidget('Google Cloud Storage', true)
+      new TitleWidget('Google Cloud Storage', false)
     );
 
     let filterInput = document.createElement('input');
@@ -190,6 +190,7 @@ export class GcsBrowserWidget extends Widget {
     filterInput.className = 'filter-search-gcs';
     filterInput.type = 'text';
     filterInput.placeholder = 'Filter by Name';
+    filterInput.style.display = 'none';
 
     // Debounce the filterFilesByName function with a delay of 300 milliseconds
     const debouncedFilter = debounce(this.filterFilesByName, 300);
@@ -212,7 +213,7 @@ export class GcsBrowserWidget extends Widget {
     this.browser.node.style.flexShrink = '1';
     this.browser.node.style.flexGrow = '1';
 
-    let newFolder = new ToolbarButton({
+    this.newFolder = new ToolbarButton({
       icon: iconGCSNewFolder,
       className: 'icon-white',
       onClick: this.handleFolderCreation,
@@ -230,14 +231,19 @@ export class GcsBrowserWidget extends Widget {
 
     // Append the file input element to the widget's node
     this.node.appendChild(this.fileInput);
-    let gcsUpload = new ToolbarButton({
+    this.gcsUpload = new ToolbarButton({
       icon: iconGCSUpload,
       className: 'icon-white jp-UploadIcon',
       onClick: this.onUploadButtonClick,
       tooltip: 'File Upload'
     });
-    this.browser.toolbar.addItem('New Folder', newFolder);
-    this.browser.toolbar.addItem('File Upload', gcsUpload);
+
+    // Since the default location is root. disabling upload and new folder buttons
+    this.newFolder.enabled = false;
+    this.gcsUpload.enabled = false;
+
+    this.browser.toolbar.addItem('New Folder', this.newFolder);
+    this.browser.toolbar.addItem('File Upload', this.gcsUpload);
     let filterItem = new Widget({ node: filterInput });
     this.browser.toolbar.addItem('Filter by Name:', filterItem);
   }
@@ -257,6 +263,21 @@ export class GcsBrowserWidget extends Widget {
       //@ts-ignore
       filterInputElement.removeAttribute('value'); // Also remove the attribute for consistency
       this.filterFilesByName(''); // Optionally refresh the content with an empty filter
+    }
+
+    // Loading Current Path
+    const currentPath = this.browser.model.path.split(':')[1];
+    // Check if the current path is the root (empty string or just '/')
+    const isRootPath = currentPath === '' || currentPath === '/';
+
+    // Freeze upload button if path is root
+    if (this.gcsUpload) {
+      this.gcsUpload.enabled = !isRootPath;
+    }
+
+    // Freeze new folder button if path is root
+    if (this.newFolder) {
+      this.newFolder.enabled = !isRootPath;
     }
   };
 }
