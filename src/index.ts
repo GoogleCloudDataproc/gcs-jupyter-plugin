@@ -29,17 +29,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
   id: 'gcs-jupyter-plugin:plugin',
   description: 'A JupyterLab extension.',
   autoStart: true,
-  optional: [    
-    IFileBrowserFactory,
-    IThemeManager,
-    IDocumentManager],
+  optional: [IFileBrowserFactory, IThemeManager, IDocumentManager],
   activate: (
     app: JupyterFrontEnd,
     factory: IFileBrowserFactory,
     themeManager: IThemeManager,
     documentManager: IDocumentManager
   ) => {
-
     console.log('JupyterLab extension gcs-jupyter-plugin is activated!');
 
     const onThemeChanged = () => {
@@ -47,18 +43,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
         ? themeManager.isLight(themeManager.theme)
         : true;
       if (isLightTheme) {
-        if ( panelGcs) {
+        if (panelGcs) {
           panelGcs.title.icon = iconStorage;
         }
       } else {
-
-        if ( panelGcs) {
+        if (panelGcs) {
           panelGcs.title.icon = iconStorageDark;
         }
       }
     };
-    // themeManager.themeChanged.connect(onThemeChanged);
-  
 
     let panelGcs: Panel | undefined;
     let gcsDrive: GCSDrive | undefined;
@@ -77,10 +70,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     );
     onThemeChanged();
     app.shell.add(panelGcs, 'left', { rank: 1002 });
-    DataprocLoggingService.log(
-      'Cloud storage is enabled',
-      LOG_LEVEL.INFO
-    );
+    DataprocLoggingService.log('Cloud storage is enabled', LOG_LEVEL.INFO);
   }
 };
 

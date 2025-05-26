@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-
 import { requestAPI } from '../handler';
 import { ToastOptions, toast } from 'react-toastify';
 
 import { DataprocLoggingService } from './loggingService';
-// import { showLoginDialog } from './loginPopup';
+import { STATUS_SUCCESS } from './const';
 
 export const toastifyCustomStyle: ToastOptions<{}> = {
   hideProgressBar: true,
@@ -37,8 +36,7 @@ export interface IAuthCredentials {
   login_error?: number;
 }
 
-export const authApi = async (
-): Promise<IAuthCredentials | undefined> => {
+export const authApi = async (): Promise<IAuthCredentials | undefined> => {
   try {
     const data = await requestAPI('credentials');
     if (typeof data === 'object' && data !== null) {
@@ -49,10 +47,27 @@ export const authApi = async (
         config_error: (data as { config_error: number }).config_error,
         login_error: (data as { login_error: number }).login_error
       };
-      return credentials
+      return credentials;
     }
   } catch (reason) {
     console.error(`Error on GET credentials.\n${reason}`);
+  }
+};
+
+export const login = async (
+  setLoginError: React.Dispatch<React.SetStateAction<boolean>>
+) => {
+  const data = await requestAPI('login', {
+    method: 'POST'
+  });
+  if (typeof data === 'object' && data !== null) {
+    const loginStatus = (data as { login: string }).login;
+    if (loginStatus === STATUS_SUCCESS) {
+      setLoginError(false);
+      window.location.reload();
+    } else {
+      setLoginError(true);
+    }
   }
 };
 
@@ -65,9 +80,6 @@ export const authApi = async (
  * @param queryParams
  * @returns a promise of the fetch result
  */
-
-
-
 
 /**
  * Helper method that wraps fetch and logs the request uri and status codes to
