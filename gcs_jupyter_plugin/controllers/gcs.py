@@ -134,9 +134,7 @@ class LoadFileController(APIHandler):
 
                 file = await client.get_file(bucket, file_path, format)
 
-            # If .ipynb file, then sanitizing
-            if file_path.endswith(".ipynb") and format == "json":
-                file = nbformat.reads(file, 4, capture_validation_error=True)
+            if format == "json":
                 self.finish(json.dumps(file))
             elif format == "base64":
                 self.write(file)
