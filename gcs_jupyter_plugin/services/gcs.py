@@ -88,7 +88,7 @@ class Client(tornado.web.RequestHandler):
             bucketObj = client.bucket(bucket)
             files = list(blobs)
 
-            # Prefixes dont have crreated / updated at data with Object. So we have to run through loop
+            # Prefixes dont have created / updated at data with Object. So we have to run through loop
             # and hit client.list_blobs() with each prefix to load blobs to get updated date info ( we can set max_result=1 ).
             # This is taking time when loop runs. So to avoid this, Grouping prefix with updated/created date
             prefix_latest_updated = {}

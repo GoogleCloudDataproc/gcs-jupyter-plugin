@@ -143,7 +143,7 @@ class LoadFileController(APIHandler):
             else:
                 self.finish(file)
         except Exception as e:
-            self.log.exception("Error fetching datasets")
+            self.log.exception("Error fetching file")
             self.finish({"error": str(e)})
 
 
@@ -259,25 +259,7 @@ class DownloadFileController(APIHandler):
                 )
 
                 self.finish(file_content)
-
-                # if format == 'text':
-                #     self.set_header('Content-Type', 'text/plain')
-                #     self.set_header('Content-Disposition', f'attachment; filename="{name}"')
-                #     self.finish(file_content)
-                # elif format == 'json':
-                #     self.set_header('Content-Type', 'application/json')
-                #     self.set_header('Content-Disposition', f'attachment; filename="{name}"')
-                #     self.finish(file_content)
-                # elif format == 'base64':
-                #     self.set_header('Content-Type', 'application/octet-stream')
-                #     self.set_header('Content-Disposition', f'attachment; filename="{name}"')
-                #     self.finish(base64.b64decode(file_content))
-                # else:
-                #     # returning the content as it is when format is not available
-                #     self.set_header('Content-Type', 'application/octet-stream')
-                #     self.set_header('Content-Disposition', f'attachment; filename="{name}"')
-                #     self.finish(file_content)
-
+            
         except Exception as e:
-            self.log.exception("Error fetching datasets")
+            self.log.exception("Error fetching file")
             self.finish({"error": str(e)})

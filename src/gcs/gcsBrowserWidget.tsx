@@ -55,8 +55,10 @@ const debounce = (func: any, delay: number) => {
 export class GcsBrowserWidget extends Widget {
   private browser!: FileBrowser;
   private fileInput!: HTMLInputElement;
-  private drive: GCSDrive;
+  private newFolder!: ToolbarButton;
+  private gcsUpload!: ToolbarButton;
   private fileBrowserFactory: IFileBrowserFactory;
+  private drive: GCSDrive;
 
   // Function to trigger file input dialog when the upload button is clicked
   private onUploadButtonClick = () => {
@@ -76,8 +78,8 @@ export class GcsBrowserWidget extends Widget {
       this.browser.createNewDirectory();
     } else {
       showDialog({
-        title: 'Create Bucket Error',
-        body: 'Please use console to create new bucket',
+        title: 'Create Folder Error',
+        body: 'Folders cannot be created outside of a bucket.',
         buttons: [Dialog.okButton()]
       });
     }
@@ -116,14 +118,10 @@ export class GcsBrowserWidget extends Widget {
           if (content.files && content.files.length > 0) {
             const result = await showDialog({
               title: 'Upload files',
-              body:
-                file.name +
-                ' already exists in ' +
-                path.bucket +
-                ', Do you want to overwrite the file?',
+              body: file.name + ' already exists. Do you want to overwrite?',
               buttons: [
-                Dialog.okButton({ label: 'Overwrite' }),
-                Dialog.cancelButton()
+                Dialog.cancelButton(),
+                Dialog.okButton({ label: 'Overwrite' })
               ]
             });
 
@@ -180,7 +178,7 @@ export class GcsBrowserWidget extends Widget {
 
     // Add title widget initially
     (this.layout as PanelLayout).addWidget(
-      new TitleWidget('Google Cloud Storage', true)
+      new TitleWidget('Google Cloud Storage', false)
     );
 
     // Check configuration and initialize appropriately
@@ -271,6 +269,9 @@ export class GcsBrowserWidget extends Widget {
     filterInput.className = 'filter-search-gcs';
     filterInput.type = 'text';
     filterInput.placeholder = 'Filter by Name';
+    filterInput.style.display = 'none';
+
+    // Debounce the filterFilesByName function with a delay of 300 milliseconds
     const debouncedFilter = debounce(this.filterFilesByName, 300);
 
     filterInput.addEventListener('input', event => {
@@ -282,13 +283,14 @@ export class GcsBrowserWidget extends Widget {
       // Call a function to filter files based on filterValue
       debouncedFilter(filterValue);
     });
-
+    // Listen for changes in the FileBrowser's path
+    this.browser.model.pathChanged.connect(this.onPathChanged, this);
     this.browser.showFileCheckboxes = false;
     (this.layout as PanelLayout).addWidget(this.browser);
     this.browser.node.style.flexShrink = '1';
     this.browser.node.style.flexGrow = '1';
 
-    let newFolder = new ToolbarButton({
+    this.newFolder = new ToolbarButton({
       icon: iconGCSNewFolder,
       className: 'icon-white',
       onClick: this.handleFolderCreation,
@@ -306,25 +308,55 @@ export class GcsBrowserWidget extends Widget {
 
     // Append the file input element to the widget's node
     this.node.appendChild(this.fileInput);
-    let gcsUpload = new ToolbarButton({
+    this.gcsUpload = new ToolbarButton({
       icon: iconGCSUpload,
       className: 'icon-white jp-UploadIcon',
       onClick: this.onUploadButtonClick,
       tooltip: 'File Upload'
     });
-    this.browser.toolbar.addItem('New Folder', newFolder);
-    this.browser.toolbar.addItem('File Upload', gcsUpload);
+
+    // Since the default location is root. disabling upload and new folder buttons
+    this.newFolder.enabled = false;
+    this.gcsUpload.enabled = false;
+
+    this.browser.toolbar.addItem('New Folder', this.newFolder);
+    this.browser.toolbar.addItem('File Upload', this.gcsUpload);
     let filterItem = new Widget({ node: filterInput });
     this.browser.toolbar.addItem('Filter by Name:', filterItem);
   }
 
   dispose() {
-    if (this.browser) {
-      this.browser.dispose();
-    }
-    if (this.fileInput) {
-      this.fileInput.removeEventListener('change', this.handleFileUpload);
-    }
+    this.browser.model.pathChanged.disconnect(this.onPathChanged, this);
+    this.browser.dispose();
+    this.fileInput.removeEventListener('change', this.handleFileUpload);
     super.dispose();
   }
+
+  private onPathChanged = () => {
+    // Clear the filter input value when the path changes
+    const filterInputElement = document.getElementById(
+      'filter-buckets-objects'
+    ) as HTMLInputElement | null;
+    if (filterInputElement) {
+      filterInputElement.value = '';
+      //@ts-ignore
+      filterInputElement.removeAttribute('value'); // Also remove the attribute for consistency
+      this.filterFilesByName(''); // Optionally refresh the content with an empty filter
+    }
+
+    // Loading Current Path
+    const currentPath = this.browser.model.path.split(':')[1];
+    // Check if the current path is the root (empty string or just '/')
+    const isRootPath = currentPath === '' || currentPath === '/';
+
+    // Freeze upload button if path is root
+    if (this.gcsUpload) {
+      this.gcsUpload.enabled = !isRootPath;
+    }
+
+    // Freeze new folder button if path is root
+    if (this.newFolder) {
+      this.newFolder.enabled = !isRootPath;
+    }
+  };
 }
