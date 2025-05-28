@@ -13,6 +13,7 @@ import { IThemeManager } from '@jupyterlab/apputils';
 import { LabIcon } from '@jupyterlab/ui-components';
 import storageIcon from '../style/icons/storage_icon.svg';
 import storageIconDark from '../style/icons/Storage-icon-dark.svg';
+
 /**
  * Initialization data for the gcs-jupyter-plugin extension.
  */
@@ -63,11 +64,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
     panelGcs.id = 'GCS-bucket-tab';
     panelGcs.title.caption = 'Google Cloud Storage';
     panelGcs.title.className = 'panel-icons-custom-style';
-    gcsDrive = new GCSDrive();
+    gcsDrive = new GCSDrive(app);
+    
+    const gcsBrowserWidget = new GcsBrowserWidget(gcsDrive, factory as IFileBrowserFactory);
+    gcsDrive.setBrowserWidget(gcsBrowserWidget);
     documentManager.services.contents.addDrive(gcsDrive);
-    panelGcs.addWidget(
-      new GcsBrowserWidget(gcsDrive, factory as IFileBrowserFactory)
-    );
+
+    panelGcs.addWidget(gcsBrowserWidget);
+    
     onThemeChanged();
     app.shell.add(panelGcs, 'left', { rank: 1002 });
     DataprocLoggingService.log('Cloud storage is enabled', LOG_LEVEL.INFO);

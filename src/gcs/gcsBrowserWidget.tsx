@@ -27,6 +27,7 @@ import { TitleWidget } from '../controls/SidePanelTitleWidget';
 import { authApi, login, toastifyCustomStyle } from '../utils/utils';
 import { toast } from 'react-toastify';
 import signinGoogleIcon from '../../style/icons/signin_google_icon.svg';
+import { Spinner } from '@jupyterlab/apputils';
 
 const iconGCSNewFolder = new LabIcon({
   name: 'gcs-toolbar:gcs-folder-new-icon',
@@ -53,12 +54,14 @@ const debounce = (func: any, delay: number) => {
 };
 
 export class GcsBrowserWidget extends Widget {
-  private browser!: FileBrowser;
-  private fileInput!: HTMLInputElement;
-  private newFolder!: ToolbarButton;
-  private gcsUpload!: ToolbarButton;
-  private fileBrowserFactory: IFileBrowserFactory;
-  private drive: GCSDrive;
+  private browser: FileBrowser;
+  private fileInput: HTMLInputElement;
+  private newFolder: ToolbarButton;
+  private gcsUpload: ToolbarButton;
+  private _browserSpinner: Spinner | null = null;
+  private _gcsDrive: GCSDrive;
+  private _contentPanel: HTMLElement | null = null; 
+  private _wasBrowserHidden: boolean = false;
 
   // Function to trigger file input dialog when the upload button is clicked
   private onUploadButtonClick = () => {
@@ -165,10 +168,22 @@ export class GcsBrowserWidget extends Widget {
     this.browser.model.refresh();
   };
 
-  constructor(drive: GCSDrive, fileBrowserFactory: IFileBrowserFactory) {
+  constructor(
+    drive: GCSDrive,
+    private fileBrowserFactory: IFileBrowserFactory
+  ) {
     super();
-    this.drive = drive;
-    this.fileBrowserFactory = fileBrowserFactory;
+    this._gcsDrive = drive;
+    this.browser = this.fileBrowserFactory.createFileBrowser(
+      'dataproc-jupyter-plugin:gcsBrowser',
+      {
+        driveName: this._gcsDrive.name,
+        refreshInterval: 30000
+      }
+    );
+
+    this.browser.showLastModifiedColumn=false;
+    this.browser.showHiddenFiles=true;
 
     // Create an empty panel layout initially
     this.layout = new PanelLayout();
@@ -176,10 +191,77 @@ export class GcsBrowserWidget extends Widget {
     this.node.style.display = 'flex';
     this.node.style.flexDirection = 'column';
 
+    this._contentPanel = this.browser.node;
+    this.browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
+    this.browser.node.style.flexShrink = '1';
+    this.browser.node.style.flexGrow = '1';
+
     // Add title widget initially
     (this.layout as PanelLayout).addWidget(
       new TitleWidget('Google Cloud Storage', false)
     );
+
+    let filterInput = document.createElement('input');
+    filterInput.id = 'filter-buckets-objects';
+    filterInput.className = 'filter-search-gcs';
+    filterInput.type = 'text';
+    filterInput.placeholder = 'Filter by Name';
+    filterInput.style.display = 'none';
+
+    // Debounce the filterFilesByName function with a delay of 300 milliseconds
+    const debouncedFilter = debounce(this.filterFilesByName, 300);
+
+    filterInput.addEventListener('input', event => {
+      const filterValue = (event.target as HTMLInputElement).value;
+      //@ts-ignore
+      document
+        .getElementById('filter-buckets-objects')
+        .setAttribute('value', filterValue);
+      // Call a function to filter files based on filterValue
+      debouncedFilter(filterValue);
+    });
+
+    // Listen for changes in the FileBrowser's path
+    this.browser.model.pathChanged.connect(this.onPathChanged, this);
+
+    this.browser.showFileCheckboxes = false;
+    (this.layout as PanelLayout).addWidget(this.browser);
+    this.browser.node.style.flexShrink = '1';
+    this.browser.node.style.flexGrow = '1';
+
+    this.newFolder = new ToolbarButton({
+      icon: iconGCSNewFolder,
+      className: 'icon-white',
+      onClick: this.handleFolderCreation,
+      tooltip: 'New Folder'
+    });
+
+    // Create a file input element
+    this.fileInput = document.createElement('input');
+    this.fileInput.type = 'file';
+    this.fileInput.multiple = true; // Enable multiple file selection
+    this.fileInput.style.display = 'none';
+
+    // Attach event listener for file selection
+    this.fileInput.addEventListener('change', this.handleFileUpload);
+
+    // Append the file input element to the widget's node
+    this.node.appendChild(this.fileInput);
+    this.gcsUpload = new ToolbarButton({
+      icon: iconGCSUpload,
+      className: 'icon-white jp-UploadIcon',
+      onClick: this.onUploadButtonClick,
+      tooltip: 'File Upload'
+    });
+
+    // Since the default location is root. disabling upload and new folder buttons
+    this.newFolder.enabled = false;
+    this.gcsUpload.enabled = false;
+
+    this.browser.toolbar.addItem('New Folder', this.newFolder);
+    this.browser.toolbar.addItem('File Upload', this.gcsUpload);
+    let filterItem = new Widget({ node: filterInput });
+    this.browser.toolbar.addItem('Filter by Name:', filterItem);
 
     // Check configuration and initialize appropriately
     this.initialize();
@@ -249,97 +331,72 @@ export class GcsBrowserWidget extends Widget {
           this.node.appendChild(loginContainer);
           return;
         }
-        this.setupBrowserWidget();
       }
     } catch (error) {
       console.error('Error during initialization:', error);
     }
   }
 
-  private setupBrowserWidget(): void {
-    this.browser = this.fileBrowserFactory.createFileBrowser(
-      'gcs-jupyter-plugin:gcsBrowser',
-      {
-        driveName: this.drive.name
-      }
-    );
+  public showBrowserSpinner(): void {
+    if (!this._browserSpinner) {
+        this._browserSpinner = new Spinner();
+        this._browserSpinner.node.classList.add('gcs-spinner-overlay');
+        this.browser.node.appendChild(this._browserSpinner.node);
+    }
 
-    let filterInput = document.createElement('input');
-    filterInput.id = 'filter-buckets-objects';
-    filterInput.className = 'filter-search-gcs';
-    filterInput.type = 'text';
-    filterInput.placeholder = 'Filter by Name';
-    filterInput.style.display = 'none';
+    this._browserSpinner.node.style.backgroundColor = 'transparent';
+    this._browserSpinner.show();
 
-    // Debounce the filterFilesByName function with a delay of 300 milliseconds
-    const debouncedFilter = debounce(this.filterFilesByName, 300);
+    if (this._contentPanel) {
+        this._contentPanel.style.opacity = '0.5';
+        this._contentPanel.style.pointerEvents = 'none';
+    } else {
+        console.warn('Content panel not found in showBrowserSpinner!');
+    }
 
-    filterInput.addEventListener('input', event => {
-      const filterValue = (event.target as HTMLInputElement).value;
-      //@ts-ignore
-      document
-        .getElementById('filter-buckets-objects')
-        .setAttribute('value', filterValue);
-      // Call a function to filter files based on filterValue
-      debouncedFilter(filterValue);
-    });
-    // Listen for changes in the FileBrowser's path
-    this.browser.model.pathChanged.connect(this.onPathChanged, this);
-    this.browser.showFileCheckboxes = false;
-    (this.layout as PanelLayout).addWidget(this.browser);
-    this.browser.node.style.flexShrink = '1';
-    this.browser.node.style.flexGrow = '1';
+    this._wasBrowserHidden = this.browser.node.classList.contains('lm-mod-hidden');
+    if (this._wasBrowserHidden) {
+        this.browser.node.classList.remove('lm-mod-hidden');
+    }
+  }
 
-    this.newFolder = new ToolbarButton({
-      icon: iconGCSNewFolder,
-      className: 'icon-white',
-      onClick: this.handleFolderCreation,
-      tooltip: 'New Folder'
-    });
+  public hideBrowserSpinner(): void {
+    if (this._browserSpinner) {
+        this._browserSpinner.hide();
+        if (this._browserSpinner.node.parentElement) {
+            this._browserSpinner.node.parentElement.removeChild(this._browserSpinner.node);
+        } else {
+            console.warn('Spinner parent element not found in hideBrowserSpinner!');
+        }
 
-    // Create a file input element
-    this.fileInput = document.createElement('input');
-    this.fileInput.type = 'file';
-    this.fileInput.multiple = true; // Enable multiple file selection
-    this.fileInput.style.display = 'none';
-
-    // Attach event listener for file selection
-    this.fileInput.addEventListener('change', this.handleFileUpload);
-
-    // Append the file input element to the widget's node
-    this.node.appendChild(this.fileInput);
-    this.gcsUpload = new ToolbarButton({
-      icon: iconGCSUpload,
-      className: 'icon-white jp-UploadIcon',
-      onClick: this.onUploadButtonClick,
-      tooltip: 'File Upload'
-    });
-
-    // Since the default location is root. disabling upload and new folder buttons
-    this.newFolder.enabled = false;
-    this.gcsUpload.enabled = false;
-
-    this.browser.toolbar.addItem('New Folder', this.newFolder);
-    this.browser.toolbar.addItem('File Upload', this.gcsUpload);
-    let filterItem = new Widget({ node: filterInput });
-    this.browser.toolbar.addItem('Filter by Name:', filterItem);
+        if (this._contentPanel) {
+            this._contentPanel.style.opacity = '';
+            this._contentPanel.style.pointerEvents = '';
+        }
+        if (this._wasBrowserHidden) {
+            this.browser.node.classList.add('lm-mod-hidden');
+        }
+        this._wasBrowserHidden = false;
+        this._browserSpinner = null;
+    } else {
+        console.warn('Spinner was not active.');
+    }
   }
 
   dispose() {
     this.browser.model.pathChanged.disconnect(this.onPathChanged, this);
     this.browser.dispose();
     this.fileInput.removeEventListener('change', this.handleFileUpload);
+    this.hideBrowserSpinner();
     super.dispose();
   }
 
   private onPathChanged = () => {
+
     // Clear the filter input value when the path changes
-    const filterInputElement = document.getElementById(
-      'filter-buckets-objects'
-    ) as HTMLInputElement | null;
+    const filterInputElement = document.getElementById('filter-buckets-objects') as HTMLInputElement | null;
     if (filterInputElement) {
       filterInputElement.value = '';
-      //@ts-ignore
       filterInputElement.removeAttribute('value'); // Also remove the attribute for consistency
       this.filterFilesByName(''); // Optionally refresh the content with an empty filter
     }
@@ -359,4 +416,5 @@ export class GcsBrowserWidget extends Widget {
       this.newFolder.enabled = !isRootPath;
     }
   };
+   
 }

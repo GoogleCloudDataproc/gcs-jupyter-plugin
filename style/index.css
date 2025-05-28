@@ -1,2 +1,37 @@
 @import url('base.css');
 @import url('gcsBucket.css');
+
+.jp-FileBrowser {
+  position: relative;
+}
+
+/* This is the overlay that contains your spinner */
+.jp-Spinner.gcs-spinner-overlay {
+    background-color: transparent !important; /* Explicitly set to transparent */
+    /* You can keep other styles here if they are not being overridden: */
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000; /* Ensure it's on top of dimmed content */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* Also ensure pointer-events are set to 'none' if this element should be clickable through */
+    pointer-events: none; /* This is crucial for interaction with dimmed background */
+}
+
+.jp-SpinnerContent {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3; /* Light grey part of the spinner */
+  border-top: 4px solid var(--jp-brand-color1); /* Colored part of the spinner */
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
