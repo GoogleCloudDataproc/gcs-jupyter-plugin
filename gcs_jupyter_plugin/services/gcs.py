@@ -92,21 +92,6 @@ class Client(tornado.web.RequestHandler):
             )
             files = list(blobs)
 
-            # Prefixes dont have created / updated at data with Object. So we have to run through loop
-            # and hit client.list_blobs() with each prefix to load blobs to get updated date info ( we can set max_result=1 ).
-            # This is taking time when loop runs. So to avoid this, Grouping prefix with updated/created date
-            prefix_latest_updated = {}
-            # if blobs.prefixes:
-            #     all_blobs_under_prefix = client.list_blobs(bucket, prefix=prefix)
-            #     for blob in all_blobs_under_prefix:
-            #         relative_name = blob.name[len(prefix or ''):]
-            #         parts = relative_name.split('/', 1)
-            #         if len(parts) > 1:
-            #             subdirectory = prefix + parts[0] + '/'
-            #             if subdirectory in blobs.prefixes:
-            #                 if subdirectory not in prefix_latest_updated or (blob.updated and prefix_latest_updated[subdirectory] < blob.updated):
-            #                     prefix_latest_updated[subdirectory] = blob.updated
-
             # Adding Sub-directories
             if blobs.prefixes:
                 for pref in blobs.prefixes:
@@ -115,12 +100,7 @@ class Client(tornado.web.RequestHandler):
                     subdir_list.append(
                         {
                             "prefixes": {
-                                "name": pref,
-                                "updatedAt": (
-                                    prefix_latest_updated.get(pref).isoformat()
-                                    if prefix_latest_updated.get(pref)
-                                    else None
-                                ),
+                                "name": pref
                             }
                         }
                     )

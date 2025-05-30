@@ -16,7 +16,11 @@
  */
 import { Widget, PanelLayout } from '@lumino/widgets';
 import { Dialog, ToolbarButton, showDialog } from '@jupyterlab/apputils';
-import { FileBrowser, IFileBrowserFactory } from '@jupyterlab/filebrowser';
+import {
+  FileBrowser,
+  IDefaultFileBrowser,
+  IFileBrowserFactory
+} from '@jupyterlab/filebrowser';
 import 'react-toastify/dist/ReactToastify.css';
 import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
@@ -24,7 +28,12 @@ import { TitleWidget } from '../controls/SidePanelTitleWidget';
 import { authApi, login, toastifyCustomStyle } from '../utils/utils';
 import { toast } from 'react-toastify';
 import { Spinner } from '@jupyterlab/apputils';
-import { iconGCSNewFolder, iconGCSRefresh, iconGCSUpload, iconSigninGoogle } from '../utils/icon';
+import {
+  iconGCSNewFolder,
+  iconGCSRefresh,
+  iconGCSUpload,
+  iconSigninGoogle
+} from '../utils/icon';
 
 export class GcsBrowserWidget extends Widget {
   private browser: FileBrowser;
@@ -34,12 +43,13 @@ export class GcsBrowserWidget extends Widget {
   private refreshButton: ToolbarButton;
   private _browserSpinner: Spinner | null = null;
   private _gcsDrive: GCSDrive;
-  private _contentPanel: HTMLElement | null = null; 
+  private _contentPanel: HTMLElement | null = null;
   private _wasBrowserHidden: boolean = false;
 
   constructor(
     drive: GCSDrive,
-    private fileBrowserFactory: IFileBrowserFactory
+    private fileBrowserFactory: IFileBrowserFactory,
+    private _defaultFileBrowser: IDefaultFileBrowser
   ) {
     super();
     this._gcsDrive = drive;
@@ -51,8 +61,11 @@ export class GcsBrowserWidget extends Widget {
       }
     );
 
-    this.browser.showLastModifiedColumn=false;
-    this.browser.showHiddenFiles=true;
+    this._defaultFileBrowser = _defaultFileBrowser;
+    this._defaultFileBrowser.navigateToCurrentDirectory = true;
+
+    this.browser.showLastModifiedColumn = false;
+    this.browser.showHiddenFiles = true;
 
     // Create an empty panel layout initially
     this.layout = new PanelLayout();
@@ -69,7 +82,7 @@ export class GcsBrowserWidget extends Widget {
     (this.layout as PanelLayout).addWidget(
       new TitleWidget('Google Cloud Storage', false)
     );
-    
+
     // Listen for changes in the FileBrowser's path
     this.browser.model.pathChanged.connect(this.onPathChanged, this);
 
@@ -104,7 +117,7 @@ export class GcsBrowserWidget extends Widget {
     });
 
     this.refreshButton = new ToolbarButton({
-      icon: iconGCSRefresh, 
+      icon: iconGCSRefresh,
       className: 'icon-white',
       onClick: this.onRefreshButtonClick,
       tooltip: 'Refresh'
@@ -299,47 +312,50 @@ export class GcsBrowserWidget extends Widget {
 
   public showBrowserSpinner(): void {
     if (!this._browserSpinner) {
-        this._browserSpinner = new Spinner();
-        this._browserSpinner.node.classList.add('gcs-spinner-overlay');
-        this.browser.node.appendChild(this._browserSpinner.node);
+      this._browserSpinner = new Spinner();
+      this._browserSpinner.node.classList.add('gcs-spinner-overlay');
+      this.browser.node.appendChild(this._browserSpinner.node);
     }
 
     this._browserSpinner.node.style.backgroundColor = 'transparent';
     this._browserSpinner.show();
 
     if (this._contentPanel) {
-        this._contentPanel.style.opacity = '0.5';
-        this._contentPanel.style.pointerEvents = 'none';
+      this._contentPanel.style.opacity = '0.5';
+      this._contentPanel.style.pointerEvents = 'none';
     } else {
-        console.warn('Content panel not found in showBrowserSpinner!');
+      console.warn('Content panel not found in showBrowserSpinner!');
     }
 
-    this._wasBrowserHidden = this.browser.node.classList.contains('lm-mod-hidden');
+    this._wasBrowserHidden =
+      this.browser.node.classList.contains('lm-mod-hidden');
     if (this._wasBrowserHidden) {
-        this.browser.node.classList.remove('lm-mod-hidden');
+      this.browser.node.classList.remove('lm-mod-hidden');
     }
   }
 
   public hideBrowserSpinner(): void {
     if (this._browserSpinner) {
-        this._browserSpinner.hide();
-        if (this._browserSpinner.node.parentElement) {
-            this._browserSpinner.node.parentElement.removeChild(this._browserSpinner.node);
-        } else {
-            console.warn('Spinner parent element not found in hideBrowserSpinner!');
-        }
+      this._browserSpinner.hide();
+      if (this._browserSpinner.node.parentElement) {
+        this._browserSpinner.node.parentElement.removeChild(
+          this._browserSpinner.node
+        );
+      } else {
+        console.warn('Spinner parent element not found in hideBrowserSpinner!');
+      }
 
-        if (this._contentPanel) {
-            this._contentPanel.style.opacity = '';
-            this._contentPanel.style.pointerEvents = '';
-        }
-        if (this._wasBrowserHidden) {
-            this.browser.node.classList.add('lm-mod-hidden');
-        }
-        this._wasBrowserHidden = false;
-        this._browserSpinner = null;
+      if (this._contentPanel) {
+        this._contentPanel.style.opacity = '';
+        this._contentPanel.style.pointerEvents = '';
+      }
+      if (this._wasBrowserHidden) {
+        this.browser.node.classList.add('lm-mod-hidden');
+      }
+      this._wasBrowserHidden = false;
+      this._browserSpinner = null;
     } else {
-        console.warn('Spinner was not active.');
+      console.warn('Spinner was not active.');
     }
   }
 
@@ -352,9 +368,8 @@ export class GcsBrowserWidget extends Widget {
   }
 
   private onPathChanged = () => {
-
     // Loading Current Path
-    console.log("Full path" , this.browser.model.path);
+    console.log('Full path', this.browser.model.path);
     const currentPath = this.browser.model.path.split(':')[1];
     // Check if the current path is the root (empty string or just '/')
     const isRootPath = currentPath === '' || currentPath === '/';
@@ -368,7 +383,5 @@ export class GcsBrowserWidget extends Widget {
     if (this.newFolder) {
       this.newFolder.enabled = !isRootPath;
     }
-
   };
-   
 }

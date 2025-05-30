@@ -63,7 +63,10 @@ export const TitleComponent = function ({
 };
 
 export class TitleWidget extends ReactWidget {
-  constructor(private titleStr: string, private isPreview: boolean) {
+  constructor(
+    private titleStr: string,
+    private isPreview: boolean
+  ) {
     super();
     this.node.style.flexShrink = '0';
   }

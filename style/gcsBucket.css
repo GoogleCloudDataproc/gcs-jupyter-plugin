@@ -2,7 +2,7 @@
 
 .gcs-panel-title {
   color: var(--jp-ui-font-color0);
-  font-family: Roboto;
+  font-family: Roboto, sans-serif;
   font-size: 15px;
   font-style: normal;
   font-weight: 400;
@@ -105,7 +105,7 @@
 }
 
 .gcs-panel-parent {
-  font-family: Roboto;
+  font-family: Roboto, sans-serif;
   background: var(--jp-layout-color1);
   font-size: 13px;
   font-style: normal;
