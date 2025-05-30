@@ -368,8 +368,7 @@ export class GcsBrowserWidget extends Widget {
   }
 
   private onPathChanged = () => {
-    // Loading Current Path
-    console.log('Full path', this.browser.model.path);
+
     const currentPath = this.browser.model.path.split(':')[1];
     // Check if the current path is the root (empty string or just '/')
     const isRootPath = currentPath === '' || currentPath === '/';
