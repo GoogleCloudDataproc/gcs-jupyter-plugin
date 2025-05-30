@@ -16,11 +16,7 @@
  */
 import { Widget, PanelLayout } from '@lumino/widgets';
 import { Dialog, ToolbarButton, showDialog } from '@jupyterlab/apputils';
-import {
-  FileBrowser,
-  IDefaultFileBrowser,
-  IFileBrowserFactory
-} from '@jupyterlab/filebrowser';
+import { FileBrowser, IFileBrowserFactory } from '@jupyterlab/filebrowser';
 import 'react-toastify/dist/ReactToastify.css';
 import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
@@ -48,8 +44,7 @@ export class GcsBrowserWidget extends Widget {
 
   constructor(
     drive: GCSDrive,
-    private fileBrowserFactory: IFileBrowserFactory,
-    private _defaultFileBrowser: IDefaultFileBrowser
+    private fileBrowserFactory: IFileBrowserFactory
   ) {
     super();
     this._gcsDrive = drive;
@@ -60,9 +55,6 @@ export class GcsBrowserWidget extends Widget {
         refreshInterval: 300000 // 5 mins
       }
     );
-
-    this._defaultFileBrowser = _defaultFileBrowser;
-    this._defaultFileBrowser.navigateToCurrentDirectory = true;
 
     this.browser.showLastModifiedColumn = false;
     this.browser.showHiddenFiles = true;

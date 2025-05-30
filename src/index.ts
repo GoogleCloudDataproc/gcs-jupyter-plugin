@@ -11,28 +11,22 @@ import { IDocumentManager } from '@jupyterlab/docmanager';
 import { IFileBrowserFactory } from '@jupyterlab/filebrowser';
 import { IThemeManager } from '@jupyterlab/apputils';
 import { iconStorage, iconStorageDark } from './utils/icon';
-import { IDefaultFileBrowser } from '@jupyterlab/filebrowser';
 
 /**
  * Initialization data for the gcs-jupyter-plugin extension.
  */
 
+
 const plugin: JupyterFrontEndPlugin<void> = {
   id: 'gcs-jupyter-plugin:plugin',
   description: 'A JupyterLab extension.',
   autoStart: true,
-  requires: [
-    IFileBrowserFactory,
-    IThemeManager,
-    IDocumentManager,
-    IDefaultFileBrowser
-  ],
+  requires: [IFileBrowserFactory, IThemeManager, IDocumentManager],
   activate: (
     app: JupyterFrontEnd,
     factory: IFileBrowserFactory,
     themeManager: IThemeManager,
-    documentManager: IDocumentManager,
-    defaultFileBrowser: IDefaultFileBrowser
+    documentManager: IDocumentManager
   ) => {
     console.log('JupyterLab extension gcs-jupyter-plugin is activated!');
 
@@ -56,11 +50,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     gcsDrive = undefined;
     gcsDrive = new GCSDrive(app);
 
-    const gcsBrowserWidget = new GcsBrowserWidget(
-      gcsDrive,
-      factory as IFileBrowserFactory,
-      defaultFileBrowser
-    );
+    const gcsBrowserWidget = new GcsBrowserWidget(gcsDrive, factory as IFileBrowserFactory);
     gcsDrive.setBrowserWidget(gcsBrowserWidget);
     documentManager.services.contents.addDrive(gcsDrive);
 
@@ -72,7 +62,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     panelGcs.title.caption = 'Google Cloud Storage';
     panelGcs.title.className = 'panel-icons-custom-style';
     panelGcs.addWidget(gcsBrowserWidget);
-
+    
     onThemeChanged();
     app.shell.add(panelGcs, 'left', { rank: 1002 });
     CloudStorageLoggingService.log('Cloud storage is enabled', LOG_LEVEL.INFO);
