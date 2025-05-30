@@ -54,13 +54,13 @@ The `jlpm` command is JupyterLab's pinned version of
 
 ```bash
 # Clone the repo to your local environment
-# Change directory to the dataproc_jupyter_plugin directory
+# Change directory to the gcs_jupyter_plugin directory
 # Install package in development mode
 pip install -e ".[test]"
 # Link your development version of the extension with JupyterLab
 jupyter labextension develop . --overwrite
 # Server extension must be manually installed in develop mode
-jupyter server extension enable dataproc_jupyter_plugin
+jupyter server extension enable gcs_jupyter_plugin
 # Rebuild extension Typescript source after making changes
 jlpm build
 ```

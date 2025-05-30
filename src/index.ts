@@ -5,32 +5,23 @@ import {
 
 import { GCSDrive } from './gcs/gcsDrive';
 import { Panel } from '@lumino/widgets';
-import { DataprocLoggingService, LOG_LEVEL } from './utils/loggingService';
+import { CloudStorageLoggingService, LOG_LEVEL } from './utils/loggingService';
 import { GcsBrowserWidget } from './gcs/gcsBrowserWidget';
 import { IDocumentManager } from '@jupyterlab/docmanager';
 import { IFileBrowserFactory } from '@jupyterlab/filebrowser';
 import { IThemeManager } from '@jupyterlab/apputils';
-import { LabIcon } from '@jupyterlab/ui-components';
-import storageIcon from '../style/icons/storage_icon.svg';
-import storageIconDark from '../style/icons/Storage-icon-dark.svg';
+import { iconStorage, iconStorageDark } from './utils/icon';
 
 /**
  * Initialization data for the gcs-jupyter-plugin extension.
  */
 
-const iconStorage = new LabIcon({
-  name: 'launcher:storage-icon',
-  svgstr: storageIcon
-});
-const iconStorageDark = new LabIcon({
-  name: 'launcher:storage-icon-dark',
-  svgstr: storageIconDark
-});
+
 const plugin: JupyterFrontEndPlugin<void> = {
   id: 'gcs-jupyter-plugin:plugin',
   description: 'A JupyterLab extension.',
   autoStart: true,
-  optional: [IFileBrowserFactory, IThemeManager, IDocumentManager],
+  requires: [IFileBrowserFactory, IThemeManager, IDocumentManager],
   activate: (
     app: JupyterFrontEnd,
     factory: IFileBrowserFactory,
@@ -54,27 +45,27 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
-    let panelGcs: Panel | undefined;
     let gcsDrive: GCSDrive | undefined;
-    panelGcs?.dispose();
     gcsDrive?.dispose();
-    panelGcs = undefined;
     gcsDrive = undefined;
-    panelGcs = new Panel();
-    panelGcs.id = 'GCS-bucket-tab';
-    panelGcs.title.caption = 'Google Cloud Storage';
-    panelGcs.title.className = 'panel-icons-custom-style';
     gcsDrive = new GCSDrive(app);
-    
+
     const gcsBrowserWidget = new GcsBrowserWidget(gcsDrive, factory as IFileBrowserFactory);
     gcsDrive.setBrowserWidget(gcsBrowserWidget);
     documentManager.services.contents.addDrive(gcsDrive);
 
+    let panelGcs: Panel | undefined;
+    panelGcs?.dispose();
+    panelGcs = undefined;
+    panelGcs = new Panel();
+    panelGcs.id = 'GCS-bucket-tab';
+    panelGcs.title.caption = 'Google Cloud Storage';
+    panelGcs.title.className = 'panel-icons-custom-style';
     panelGcs.addWidget(gcsBrowserWidget);
     
     onThemeChanged();
     app.shell.add(panelGcs, 'left', { rank: 1002 });
-    DataprocLoggingService.log('Cloud storage is enabled', LOG_LEVEL.INFO);
+    CloudStorageLoggingService.log('Cloud storage is enabled', LOG_LEVEL.INFO);
   }
 };
 

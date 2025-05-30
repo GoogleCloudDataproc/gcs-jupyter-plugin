@@ -59,7 +59,7 @@ class UrlHandler(APIHandler):
 class LogHandler(APIHandler):
     @tornado.web.authenticated
     async def post(self):
-        logger = self.log.getChild("DataprocPluginClient")
+        logger = self.log.getChild("CloudStoragePluginClient")
         log_body = self.get_json_body()
         logger.log(log_body["level"], log_body["message"])
         self.finish({"status": "OK"})

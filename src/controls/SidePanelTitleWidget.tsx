@@ -40,7 +40,7 @@ export const TitleComponent = function ({
         ...styles
       }}
     >
-      <div className="dataset-explorer-refresh-container">
+      <div className="gcs-explorer-refresh-container">
         <div>
           <span>{titleStr}</span>
           {isPreview ? (

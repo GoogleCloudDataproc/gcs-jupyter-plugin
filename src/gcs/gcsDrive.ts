@@ -20,11 +20,10 @@ import { ISignal, Signal } from '@lumino/signaling';
 import { GcsService } from './gcsService';
 
 import 'react-toastify/dist/ReactToastify.css';
-import { showDialog, Dialog } from '@jupyterlab/apputils';
+import { showDialog, Dialog, Spinner } from '@jupyterlab/apputils';
 import mime from 'mime-types';
 
-import { Widget } from '@lumino/widgets';
-import { JupyterFrontEnd, LabShell } from '@jupyterlab/application';
+import { JupyterFrontEnd } from '@jupyterlab/application';
 import { GcsBrowserWidget } from './gcsBrowserWidget';
 
 // Template for an empty Directory IModel.
@@ -53,20 +52,20 @@ export class GCSDrive implements Contents.IDrive {
     this._browserWidget = widget;
   }
 
-  private _saveSpinner: Widget | null = null;
+  private _saveSpinner: Spinner | null = null;
   private _app: JupyterFrontEnd;
   private _browserWidget: GcsBrowserWidget | null = null;
 
   private _isDisposed = false;
   private _fileChanged = new Signal<this, Contents.IChangedArgs>(this);
-  private _isUserInitiatedGet: boolean = false;
+  //private _isUserInitiatedGet: boolean = false;
 
   get fileChanged(): ISignal<this, Contents.IChangedArgs> {
     return this._fileChanged;
   }
-  public setUserInitiatedGet(value: boolean): void {
-    this._isUserInitiatedGet = value;
-  }
+  // public setUserInitiatedGet(value: boolean): void {
+  //   this._isUserInitiatedGet = value;
+  // }
   
   readonly serverSettings: ServerConnection.ISettings;
 
@@ -92,41 +91,44 @@ export class GCSDrive implements Contents.IDrive {
   }
 
   private showSaveSpinner(): void {
-    if (!this._saveSpinner) {
-      this._saveSpinner = new Widget();
-      this._saveSpinner.id = 'gcs-jupyter-plugin-save-spinner';
-      this._saveSpinner.addClass('jp-Spinner');
-      // The content div is typically added by the spinner's CSS and structure,
-      // but explicitly adding it here ensures consistency if needed.
-      const contentDiv = document.createElement('div');
-      contentDiv.className = 'jp-SpinnerContent';
-      this._saveSpinner.node.appendChild(contentDiv);
+    const activeWidget = this._app.shell.currentWidget;
+
+    if (!activeWidget) {
+      console.warn('No active widget found to show save spinner.');
+      return;
     }
 
-    // Add the spinner to the main JupyterLab shell.
-    // In a JupyterLab extension, `app.shell` usually refers to `LabShell`.
-    if (this._app.shell instanceof LabShell) {
-      this._app.shell.add(this._saveSpinner, 'main');
-    } else {
-      console.warn('JupyterLab shell not found or is not a LabShell instance. Cannot show spinner.');
+    if (!this._saveSpinner) {
+      this._saveSpinner = new Spinner();
+      this._saveSpinner.addClass('gcs-save-spinner-overlay');
     }
+
+    this._saveSpinner.node.style.backgroundColor = 'transparent';
+
+    activeWidget.node.appendChild(this._saveSpinner.node);
     this._saveSpinner.show();
+
+    activeWidget.node.style.opacity = '0.5';
+    activeWidget.node.style.pointerEvents = 'none';
+
   }
 
-  /**
-   * Hides and disposes the save spinner.
-   */
   private hideSaveSpinner(): void {
     if (this._saveSpinner) {
       this._saveSpinner.hide();
-      this._saveSpinner.dispose(); // Important for cleanup
-      this._saveSpinner = null;
-    }
-  }
 
-  async tempcall(){
-    this.showSaveSpinner();
-    this.hideSaveSpinner();
+      if (this._saveSpinner.node.parentElement) {
+        this._saveSpinner.node.parentElement.removeChild(this._saveSpinner.node);
+      }
+      this._saveSpinner.dispose();
+      this._saveSpinner = null;
+    
+      const activeWidget = this._app.shell.currentWidget;
+      if (activeWidget) {
+        activeWidget.node.style.opacity = '';
+        activeWidget.node.style.pointerEvents = '';
+      }
+    }
   }
 
   async get(
@@ -143,33 +145,20 @@ export class GCSDrive implements Contents.IDrive {
     if (localPath.length === 0) {
       // Case 1: Return the buckets.
       try{
-        // Reset the flag immediately to ensure polling doesn't trigger the spinner
-        if (this._isUserInitiatedGet){
-          this._isUserInitiatedGet = false; 
-          this._browserWidget?.showBrowserSpinner();
-          // Reset the flag immediately to ensure polling doesn't trigger the spinner
-        }
+        this._browserWidget?.showBrowserSpinner();
         return await this.getBuckets();
       }finally{
         this._browserWidget?.hideBrowserSpinner();
       }
     }
 
-    const name = localPath.split('/').pop() ?? ""; // Gets the last part of the path
-    const isFile = name.includes('.') && name.lastIndexOf('.') > 0;
+    const request: Contents.IFetchOptions = options || {};
 
-    if (isFile) {
-      // Case 3
+    if(request.type == 'file'){
       return await this.getFile(localPath, options);
     }else{
-      // Case 2
       try{
-        // Reset the flag immediately to ensure polling doesn't trigger the spinner
-        if (this._isUserInitiatedGet){
-          this._isUserInitiatedGet = false;
-          this._browserWidget?.showBrowserSpinner();
-          // Reset the flag immediately to ensure polling doesn't trigger the spinner
-        }
+        this._browserWidget?.showBrowserSpinner();
         return await this.getDirectory(localPath);
       }finally{
         this._browserWidget?.hideBrowserSpinner();
@@ -181,32 +170,8 @@ export class GCSDrive implements Contents.IDrive {
    * @returns IModel directory containing all the GCS buckets for the current project.
    */
   private async getBuckets() {
-    let paragraph: HTMLElement | null;
-    let searchInput = document.getElementById('filter-buckets-objects');
-    //@ts-ignore
-
-    let searchValue = searchInput.value;
-    const content = await GcsService.listBuckets({
-      prefix: searchValue
-    });
-
-    if (content?.error) {
-      if (document.getElementById('gcs-list-bucket-error')) {
-        document.getElementById('gcs-list-bucket-error')?.remove();
-      }
-      const para = document.createElement('p');
-      para.id = 'gcs-list-bucket-error';
-      para.style.color = '#ff0000';
-      para.style.maxWidth = '100%';
-      para.style.whiteSpace = 'normal';
-      para.textContent = content?.error;
-      paragraph = document.getElementById('filter-buckets-objects');
-      paragraph?.after(para);
-    } else {
-      if (document.getElementById('gcs-list-bucket-error')) {
-        document.getElementById('gcs-list-bucket-error')?.remove();
-      }
-    }
+    
+    const content = await GcsService.listBuckets();
 
     if (!content) {
       throw `Error Listing Buckets ${content}`;
@@ -228,12 +193,9 @@ export class GCSDrive implements Contents.IDrive {
    */
   private async getDirectory(localPath: string) {
     const path = GcsService.pathParser(localPath);
-    let searchInput = document.getElementById('filter-buckets-objects');
-    //@ts-ignore
-    let searchValue = searchInput.value;
     const prefix = path.path.length > 0 ? `${path.path}/` : path.path;
     const content = await GcsService.listFiles({
-        prefix: prefix + searchValue,
+        prefix: prefix,
         bucket: path.bucket,
     });
     if (!content) {
@@ -729,60 +691,62 @@ export class GCSDrive implements Contents.IDrive {
       return DIRECTORY_IMODEL;
     } else {
 
-      this._browserWidget?.showBrowserSpinner();
+      try{
+        this._browserWidget?.showBrowserSpinner();
 
-      if (oldPath.path.includes('UntitledFolder' + untitledFolderSuffix)) {
-        oldPath.path = oldPath.path + '/';
-        newPath.path = newPath.path + '/';
-        path = path + '/';
-      }
-      const response = await GcsService.renameFile({
-        oldBucket: oldPath.bucket,
-        oldPath: oldPath.path,
-        newBucket: newPath.bucket,
-        newPath: newPath.path
-      });
-
-      this._browserWidget?.hideBrowserSpinner();
-
-      if (response.status === 200) {
-        await GcsService.deleteFile({
-          bucket: oldPath.bucket,
-          path: oldPath.path
-        });
-
-        if (isOldPathMeetsFilename){
-          return {
-            type: 'file',
-            path: newLocalPath,
-            name: newLocalPath.split('\\').at(-1) ?? '',
-            format: options?.format ?? 'text',
-            content: '',
-            created: '',
-            writable: true,
-            last_modified: '',
-            mimetype: ''
-          };
-        }else{
-          return {
-            type: 'directory',
-            path: newLocalPath + (newLocalPath.endsWith('/') ? newLocalPath : newLocalPath + '/'),
-            name: newName,
-            format: null,
-            created: new Date().toISOString(),
-            writable: true,
-            last_modified: new Date().toISOString(),
-            mimetype: '',
-            content: null
-          };
+        if (oldPath.path.includes('UntitledFolder' + untitledFolderSuffix)) {
+          oldPath.path = oldPath.path + '/';
+          newPath.path = newPath.path + '/';
+          path = path + '/';
         }
-      }else{
-        await showDialog({
-          title: 'Rename Error',
-          body: response.error,
-          buttons: [Dialog.okButton()]
+        const response = await GcsService.renameFile({
+          oldBucket: oldPath.bucket,
+          oldPath: oldPath.path,
+          newBucket: newPath.bucket,
+          newPath: newPath.path
         });
-        return DIRECTORY_IMODEL;
+
+        if (response.status === 200) {
+          await GcsService.deleteFile({
+            bucket: oldPath.bucket,
+            path: oldPath.path
+          });
+
+          if (isOldPathMeetsFilename){
+            return {
+              type: 'file',
+              path: newLocalPath,
+              name: newLocalPath.split('\\').at(-1) ?? '',
+              format: options?.format ?? 'text',
+              content: '',
+              created: '',
+              writable: true,
+              last_modified: '',
+              mimetype: ''
+            };
+          }else{
+            return {
+              type: 'directory',
+              path: newLocalPath + (newLocalPath.endsWith('/') ? newLocalPath : newLocalPath + '/'),
+              name: newName,
+              format: null,
+              created: new Date().toISOString(),
+              writable: true,
+              last_modified: new Date().toISOString(),
+              mimetype: '',
+              content: null
+            };
+          }
+        }else{
+          await showDialog({
+            title: 'Rename Error',
+            body: response.error,
+            buttons: [Dialog.okButton()]
+          });
+          return DIRECTORY_IMODEL;
+        }
+      }finally{
+        this._browserWidget?.hideBrowserSpinner();
       }
     }
   }
