@@ -52,13 +52,13 @@ export class GcsService {
    * Thin wrapper around storage.bucket.list
    * @see https://cloud.google.com/storage/docs/listing-buckets#rest-list-buckets
    */
-  static async listBuckets({ prefix }: { prefix: string }) {
+  static async listBuckets() {
     const credentials = await authApi();
     if (!credentials) {
       throw 'not logged in';
     }
     const data = (await requestAPI(
-      `api/storage/listBuckets?prefix=${prefix}`
+      `api/storage/listBuckets`
     )) as any;
     return data;
   }

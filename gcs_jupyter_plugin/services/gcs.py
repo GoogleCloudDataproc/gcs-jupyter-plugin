@@ -20,6 +20,7 @@ import aiohttp
 import mimetypes
 import base64
 from datetime import timedelta
+import nbformat
 
 import tornado.ioloop
 import tornado.web
@@ -56,7 +57,6 @@ class Client(tornado.web.RequestHandler):
             project = self.project_id
             creds = credentials.Credentials(token)
             client = storage.Client(project=project, credentials=creds)
-            buckets = client.list_buckets()
             buckets = client.list_buckets(prefix=prefix)
             for bucket in buckets:
                 bucket_list.append(
@@ -84,27 +84,28 @@ class Client(tornado.web.RequestHandler):
             project = self.project_id
             creds = credentials.Credentials(token)
             client = storage.Client(project=project, credentials=creds)
-            blobs = client.list_blobs(bucket, prefix=prefix, delimiter="/")
-            bucketObj = client.bucket(bucket)
+            blobs = client.list_blobs(
+                bucket,
+                prefix=prefix,
+                delimiter="/",
+                fields="items(name,size,timeCreated,updated,contentType),prefixes",
+            )
             files = list(blobs)
 
             # Prefixes dont have created / updated at data with Object. So we have to run through loop
             # and hit client.list_blobs() with each prefix to load blobs to get updated date info ( we can set max_result=1 ).
             # This is taking time when loop runs. So to avoid this, Grouping prefix with updated/created date
             prefix_latest_updated = {}
-            if blobs.prefixes:
-                all_blobs_under_prefix = client.list_blobs(bucket, prefix=prefix)
-                for blob in all_blobs_under_prefix:
-                    relative_name = blob.name[len(prefix or "") :]
-                    parts = relative_name.split("/", 1)
-                    if len(parts) > 1:
-                        subdirectory = prefix + parts[0] + "/"
-                        if subdirectory in blobs.prefixes:
-                            if subdirectory not in prefix_latest_updated or (
-                                blob.updated
-                                and prefix_latest_updated[subdirectory] < blob.updated
-                            ):
-                                prefix_latest_updated[subdirectory] = blob.updated
+            # if blobs.prefixes:
+            #     all_blobs_under_prefix = client.list_blobs(bucket, prefix=prefix)
+            #     for blob in all_blobs_under_prefix:
+            #         relative_name = blob.name[len(prefix or ''):]
+            #         parts = relative_name.split('/', 1)
+            #         if len(parts) > 1:
+            #             subdirectory = prefix + parts[0] + '/'
+            #             if subdirectory in blobs.prefixes:
+            #                 if subdirectory not in prefix_latest_updated or (blob.updated and prefix_latest_updated[subdirectory] < blob.updated):
+            #                     prefix_latest_updated[subdirectory] = blob.updated
 
             # Adding Sub-directories
             if blobs.prefixes:
@@ -118,7 +119,7 @@ class Client(tornado.web.RequestHandler):
                                 "updatedAt": (
                                     prefix_latest_updated.get(pref).isoformat()
                                     if prefix_latest_updated.get(pref)
-                                    else ""
+                                    else None
                                 ),
                             }
                         }
@@ -169,6 +170,12 @@ class Client(tornado.web.RequestHandler):
                     return base64_encoded
                 except Exception as encode_error:
                     return []
+
+            if file_path.endswith(".ipynb"):
+                file_content = blob.download_as_text()
+                return nbformat.reads(
+                    file_content, as_version=4, capture_validation_error=True
+                )
             elif format == "json":
                 file_content = blob.download_as_text()
                 return file_content
@@ -176,8 +183,7 @@ class Client(tornado.web.RequestHandler):
                 return blob.download_as_text()
 
         except Exception as e:
-            self.log.exception(f"Error getting file: {e}")
-            return []  # Return empty list on error.
+            raise e
 
     async def create_folder(self, bucket, path, folder_name):
         try:

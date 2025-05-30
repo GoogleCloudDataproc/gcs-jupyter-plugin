@@ -28,13 +28,12 @@ class ListBucketsController(APIHandler):
     @tornado.web.authenticated
     async def get(self):
         try:
-            prefix = self.get_argument("prefix")
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
 
-                buckets = await client.list_buckets(prefix)
+                buckets = await client.list_buckets()
             self.finish(json.dumps(buckets))
         except Exception as e:
             self.log.exception("Error fetching datasets.")
@@ -134,9 +133,7 @@ class LoadFileController(APIHandler):
 
                 file = await client.get_file(bucket, file_path, format)
 
-            # If .ipynb file, then sanitizing
-            if file_path.endswith(".ipynb") and format == "json":
-                file = nbformat.reads(file, 4, capture_validation_error=True)
+            if format == "json":
                 self.finish(json.dumps(file))
             elif format == "base64":
                 self.write(file)
@@ -144,6 +141,7 @@ class LoadFileController(APIHandler):
                 self.finish(file)
         except Exception as e:
             self.log.exception("Error fetching file")
+            self.set_status(404)
             self.finish({"error": str(e)})
 
 
@@ -259,7 +257,7 @@ class DownloadFileController(APIHandler):
                 )
 
                 self.finish(file_content)
-            
+
         except Exception as e:
             self.log.exception("Error fetching file")
             self.finish({"error": str(e)})
