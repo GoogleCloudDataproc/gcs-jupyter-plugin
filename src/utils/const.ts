@@ -20,7 +20,6 @@ const { version } = require('../../package.json');
 export const VERSION_DETAIL = version;
 
 interface IGcpUrlResponseData {
-
   storage_url: string;
 }
 export const gcpServiceUrls = (async () => {
