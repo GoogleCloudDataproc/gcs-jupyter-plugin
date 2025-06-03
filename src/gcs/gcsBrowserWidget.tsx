@@ -41,6 +41,7 @@ export class GcsBrowserWidget extends Widget {
   private _gcsDrive: GCSDrive;
   private _contentPanel: HTMLElement | null = null;
   private _wasBrowserHidden: boolean = false;
+  private _spinnerRefCount: number = 0;
 
   constructor(
     drive: GCSDrive,
@@ -77,6 +78,17 @@ export class GcsBrowserWidget extends Widget {
 
     // Listen for changes in the FileBrowser's path
     this.browser.model.pathChanged.connect(this.onPathChanged, this);
+
+    const originalCd = this.browser.model.cd;
+    this.browser.model.cd = async (path: string) => {
+        this.showBrowserSpinner();
+        try {
+            const result = await originalCd.call(this.browser.model, path);
+            return result;
+        } finally {
+            this.hideBrowserSpinner();
+        }
+    };
 
     this.browser.showFileCheckboxes = false;
     (this.layout as PanelLayout).addWidget(this.browser);
@@ -229,7 +241,12 @@ export class GcsBrowserWidget extends Widget {
   };
 
   private onRefreshButtonClick = async () => {
-    await this.browser.model.refresh();
+    this.showBrowserSpinner(); // Show spinner for explicit refresh
+    try {
+      await this.browser.model.refresh();
+    } finally {
+      this.hideBrowserSpinner(); // Hide after refresh completes
+    }
   };
 
   private async initialize(): Promise<void> {
@@ -303,6 +320,7 @@ export class GcsBrowserWidget extends Widget {
   }
 
   public showBrowserSpinner(): void {
+    this._spinnerRefCount++;
     if (!this._browserSpinner) {
       this._browserSpinner = new Spinner();
       this._browserSpinner.node.classList.add('gcs-spinner-overlay');
@@ -326,28 +344,36 @@ export class GcsBrowserWidget extends Widget {
     }
   }
 
-  public hideBrowserSpinner(): void {
-    if (this._browserSpinner) {
-      this._browserSpinner.hide();
-      if (this._browserSpinner.node.parentElement) {
-        this._browserSpinner.node.parentElement.removeChild(
-          this._browserSpinner.node
-        );
-      } else {
-        console.warn('Spinner parent element not found in hideBrowserSpinner!');
-      }
+  public async refreshContents() {
+    await this.browser.model.refresh();
+  }
 
-      if (this._contentPanel) {
-        this._contentPanel.style.opacity = '';
-        this._contentPanel.style.pointerEvents = '';
+  public async hideBrowserSpinner(): Promise<void> {
+    this._spinnerRefCount--;
+    if (this._spinnerRefCount <= 0) { // Only hide if no more active requests
+      this._spinnerRefCount = 0;
+      if (this._browserSpinner) {
+        this._browserSpinner.hide();
+        if (this._browserSpinner.node.parentElement) {
+          this._browserSpinner.node.parentElement.removeChild(
+            this._browserSpinner.node
+          );
+        } else {
+          console.warn('Spinner parent element not found in hideBrowserSpinner!');
+        }
+
+        if (this._contentPanel) {
+          this._contentPanel.style.opacity = '';
+          this._contentPanel.style.pointerEvents = '';
+        }
+        if (this._wasBrowserHidden) {
+          this.browser.node.classList.add('lm-mod-hidden');
+        }
+        this._wasBrowserHidden = false;
+        this._browserSpinner = null;
+      } else {
+        console.warn('Spinner was not active.');
       }
-      if (this._wasBrowserHidden) {
-        this.browser.node.classList.add('lm-mod-hidden');
-      }
-      this._wasBrowserHidden = false;
-      this._browserSpinner = null;
-    } else {
-      console.warn('Spinner was not active.');
     }
   }
 
