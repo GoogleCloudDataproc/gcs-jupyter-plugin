@@ -125,19 +125,22 @@ class LoadFileController(APIHandler):
         try:
             bucket = self.get_argument("bucket")
             file_path = self.get_argument("path")
-            format = self.get_argument("format")
+            file_format = self.get_argument("format")
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
 
-                file = await client.get_file(bucket, file_path, format)
+                file = await client.get_file(bucket, file_path, file_format)
 
-            if format == "json":
+            if file_format == "json":
+                self.set_header("Content-Type", "application/json")
                 self.finish(json.dumps(file))
-            elif format == "base64":
+            elif file_format == "base64":
+                self.set_header("Content-Type", "application/octet-stream")
                 self.write(file)
             else:
+                self.set_header("Content-Type", "text/plain")
                 self.finish(file)
         except Exception as e:
             self.log.exception("Error fetching file")

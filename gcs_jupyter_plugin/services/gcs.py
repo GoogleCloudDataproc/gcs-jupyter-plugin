@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import asyncio
 import json
 import os
 import io
-import aiohttp
 import mimetypes
 import base64
 from datetime import timedelta
 import nbformat
+import time
 
 import tornado.ioloop
 import tornado.web
@@ -29,7 +29,6 @@ from tornado import gen
 
 from google.oauth2 import credentials
 from google.cloud import storage
-import proto
 
 from gcs_jupyter_plugin import urls
 from gcs_jupyter_plugin.commons.constants import CONTENT_TYPE, STORAGE_SERVICE_NAME
@@ -56,8 +55,15 @@ class Client(tornado.web.RequestHandler):
             token = self._access_token
             project = self.project_id
             creds = credentials.Credentials(token)
-            client = storage.Client(project=project, credentials=creds)
-            buckets = client.list_buckets(prefix=prefix)
+            
+            loop = asyncio.get_running_loop()
+            
+            def _get_buckets_from_gcs():
+                client = storage.Client(project=project, credentials=creds)
+                return client.list_buckets(prefix=prefix)
+            
+            buckets = await loop.run_in_executor(None, _get_buckets_from_gcs)
+            
             for bucket in buckets:
                 bucket_list.append(
                     {
@@ -83,20 +89,25 @@ class Client(tornado.web.RequestHandler):
             token = self._access_token
             project = self.project_id
             creds = credentials.Credentials(token)
-            client = storage.Client(project=project, credentials=creds)
-            blobs = client.list_blobs(
-                bucket,
-                prefix=prefix,
-                delimiter="/",
-                fields="items(name,size,timeCreated,updated,contentType),prefixes",
-            )
-            files = list(blobs)
+            
+            loop = asyncio.get_running_loop()
 
+            def _get_blobs_from_gcs():
+                client = storage.Client(project=project, credentials=creds)
+                return client.list_blobs(
+                    bucket,
+                    prefix=prefix,
+                    delimiter="/",
+                    fields="items(name,size,timeCreated,updated,contentType),prefixes",
+                )
+
+            blobs = await loop.run_in_executor(None, _get_blobs_from_gcs)
+
+            files = list(blobs)
+            
             # Adding Sub-directories
             if blobs.prefixes:
                 for pref in blobs.prefixes:
-
-                    subdir_name = pref[:-1]
                     subdir_list.append(
                         {
                             "prefixes": {
@@ -125,7 +136,7 @@ class Client(tornado.web.RequestHandler):
                             }
                         }
                     )
-
+            
             result["prefixes"] = subdir_list
             result["files"] = file_list
             return result
@@ -383,10 +394,7 @@ class Client(tornado.web.RequestHandler):
                     # Only 0 byte Object present
                     isFile = False
                 elif blob_count > 0:
-                    return {
-                        "error": "Non-Empty folder cannot be renamed.",
-                        "status": 409,
-                    }
+                    return await self.rename_non_empty_folder(bucket, blob_name, new_name)
                 else:
                     return {"error": f"{blob_name} not found", "status": 404}
 
@@ -426,6 +434,70 @@ class Client(tornado.web.RequestHandler):
         except Exception as e:
             self.log.exception(f"Error renaming from {blob_name} to {new_name}.")
             return {"error": str(e), "status": 500}
+        
+    async def rename_non_empty_folder(self, bucket: storage.Bucket, source_prefix: str, new_prefix: str):
+        source_prefix_normalized = source_prefix if source_prefix.endswith('/') else source_prefix + '/'
+        new_prefix_normalized = new_prefix if new_prefix.endswith('/') else new_prefix + '/'
+
+        blobs_to_rename = list(bucket.list_blobs(prefix=source_prefix_normalized))
+
+        if not blobs_to_rename:
+            empty_folder_blob = bucket.blob(source_prefix_normalized)
+            if empty_folder_blob.exists() and empty_folder_blob.size == 0:
+                self.log.info(f"Renaming empty folder marker '{source_prefix_normalized}' to '{new_prefix_normalized}'.")
+                new_blob = bucket.rename_blob(empty_folder_blob, new_prefix_normalized)
+                return {
+                    "name": new_blob.name,
+                    "bucket": bucket.name,
+                    "success": True,
+                    "status": 200,
+                    "message": "Empty folder marker renamed."
+                }
+            else:
+                return {"error": f"Folder '{source_prefix}' not found or has no objects to rename.", "status": 404}
+
+        if new_prefix_normalized.startswith(source_prefix_normalized) and new_prefix_normalized != source_prefix_normalized:
+            return {
+                "error": f"Cannot rename folder '{source_prefix}' to a sub-path of itself '{new_prefix}'.",
+                "status": 400,
+            }
+
+        renamed_blobs = []
+
+        try:
+            for blob in blobs_to_rename:
+                relative_path = blob.name[len(source_prefix_normalized):]
+                new_blob_name = new_prefix_normalized + relative_path
+
+                if bucket.blob(new_blob_name).exists():
+                    self.log.error(f"Conflict detected during manual folder rename: '{new_blob_name}' already exists.")
+                    raise ValueError(f"Destination object '{new_blob_name}' already exists. Aborting rename.")
+
+                self.log.info(f"Copying '{blob.name}' to '{new_blob_name}'")
+                new_blob = bucket.copy_blob(blob, bucket, new_name=new_blob_name)
+                renamed_blobs.append(new_blob)
+
+            for blob in blobs_to_rename:
+                self.log.info(f"Deleting original '{blob.name}'")
+                blob.delete()
+
+            return {
+                "message": f"Folder '{source_prefix}' and its contents renamed to '{new_prefix}'.",
+                "bucket": bucket.name,
+                "success": True,
+                "status": 200,
+            }
+        except Exception as e:
+            self.log.error(f"Error during manual folder rename. Attempting to revert changes: {e}")
+            for blob in renamed_blobs:
+                original_blob_name = source_prefix_normalized + blob.name[len(new_prefix_normalized):]
+                try:
+                    self.log.warning(f"Attempting to revert '{blob.name}' to '{original_blob_name}'")
+                    bucket.copy_blob(blob, bucket, new_name=original_blob_name)
+                    blob.delete()
+                except Exception as revert_e:
+                    self.log.error(f"Failed to revert blob '{blob.name}' to '{original_blob_name}': {revert_e}")
+            raise
 
     async def download_file(self, bucket_name, file_path, name, format):
         try:
