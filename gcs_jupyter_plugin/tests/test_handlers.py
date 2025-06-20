@@ -5,7 +5,6 @@ from google.cloud import storage
 import datetime
 import json
 import base64
-import nbformat
 
 from gcs_jupyter_plugin.services.gcs import Client
 

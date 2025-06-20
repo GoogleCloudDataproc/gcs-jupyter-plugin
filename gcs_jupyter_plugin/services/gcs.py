@@ -16,16 +16,11 @@ import asyncio
 import json
 import os
 import io
-import mimetypes
 import base64
 from datetime import timedelta
 import nbformat
-import time
 
-import tornado.ioloop
 import tornado.web
-
-from tornado import gen
 
 from google.oauth2 import credentials
 from google.cloud import storage
@@ -303,47 +298,66 @@ class Client(tornado.web.RequestHandler):
             # retriving blob
             blob = bucket_obj.blob(path)
 
-            isFile = True
-
-            if not blob.exists():
-                # using blobs , we can exclude the 0 byte blob and count the children
-                blobs = bucket_obj.list_blobs(prefix=path + "/")
-
-                blob_count = 0
-                for iblob in blobs:
-                    # For empty folders, gcs creates a zero-byte object with a trailing slash to simulate a folder.
-                    # here we exclude that 0 byte object.
-                    blob = iblob
-                    isFile = False
-                    if (
-                        iblob.name[:-1] if iblob.name.endswith("/") else iblob.name
-                    ) != path:
-                        blob_count += 1
-                        # breaking the loop here, since we just want to know whether at-least 1 file present or not.
-                        # Folder cannot be deleted even if 1 file/folder present
-                        break
-
-                if blob_count > 0:
-                    return {
-                        "error": "Non-Empty folder cannot be deleted.",
-                        "status": 409,
-                    }
-
-            # Checking whether blob exists
-            if not blob.exists():
-                # Without trailing slash, 0 byte object wont be pointed out.
-                # So, In the case of Empty folder, blob.exists() returns false and causes 404.
-                blob = bucket_obj.blob(path + "/")
-                if not blob.exists():
+            is_file = True
+            target_blob = bucket_obj.blob(path)
+            if target_blob.exists():
+                # It's a file or a 0-byte folder marker
+                if target_blob.size == 0 and target_blob.name.endswith('/'):
+                    # It's explicitly an empty folder marker
+                    is_file = False
+                else:
+                    # It's a regular file
+                    is_file = True
+            else:
+                # If the exact blob doesn't exist, check if it's a folder (prefix)
+                # We append '/' to the path to check for objects *within* that folder.
+                blobs_under_prefix = list(bucket_obj.list_blobs(prefix=path + "/"))
+                if len(blobs_under_prefix) > 0:
+                    is_file = False
+                elif bucket_obj.blob(path + "/").exists():
+                    # It might be a 0-byte object created for an empty folder
+                    is_file = False
+                else:
                     return {"error": "File/Folder not found.", "status": 404}
 
-            # Attempt to delete the blob
-            try:
-                blob.delete()
-                return {"success": True}
-            except Exception as e:
-                self.log.exception(f"Error deleting file/folder {path}.")
-                return {"error": str(e), "status": 500}
+            if is_file:
+                # Delete a single file
+                try:
+                    target_blob.delete()
+                    self.log.info(f"Successfully deleted file: {path}")
+                    return {"success": True, "status": 200}
+                except Exception as e:
+                    self.log.exception(f"Error deleting file {path}.")
+                    return {"error": str(e), "status": 500}
+            else:
+                # Delete a folder (recursively delete all blobs with the prefix)
+                folder_prefix = path if path.endswith('/') else path + '/'
+                self.log.info(f"Attempting to delete non-empty folder: {folder_prefix}")
+                try:
+                    blobs_to_delete = list(bucket_obj.list_blobs(prefix=folder_prefix))
+                    if not blobs_to_delete:
+                        # This case handles if list_blobs returns empty for some reason,
+                        # but we already determined it's a folder, possibly an empty marker.
+                        # Try deleting the 0-byte marker if it exists.
+                        empty_folder_blob = bucket_obj.blob(folder_prefix)
+                        if empty_folder_blob.exists() and empty_folder_blob.size == 0:
+                            empty_folder_blob.delete()
+                            self.log.info(f"Successfully deleted empty folder marker: {folder_prefix}")
+                            return {"success": True, "status": 200}
+                        else:
+                            return {"error": f"Folder '{path}' found no contents to delete.", "status": 404}
+
+
+                    for blob_to_delete in blobs_to_delete:
+                        self.log.info(f"Deleting blob: {blob_to_delete.name}")
+                        blob_to_delete.delete()
+                    
+                    self.log.info(f"Successfully deleted non-empty folder and its contents: {path}")
+                    return {"success": True, "status": 200}
+
+                except Exception as e:
+                    self.log.exception(f"Error deleting non-empty folder {path}.")
+                    return {"error": str(e), "status": 500}
 
         except Exception as e:
             self.log.exception(f"Error deleting file {path}.")
@@ -394,6 +408,7 @@ class Client(tornado.web.RequestHandler):
                     # Only 0 byte Object present
                     isFile = False
                 elif blob_count > 0:
+                    self.log.info("Renaming a non-empty folder.")
                     return await self.rename_non_empty_folder(bucket, blob_name, new_name)
                 else:
                     return {"error": f"{blob_name} not found", "status": 404}
@@ -463,7 +478,6 @@ class Client(tornado.web.RequestHandler):
             }
 
         renamed_blobs = []
-
         try:
             for blob in blobs_to_rename:
                 relative_path = blob.name[len(source_prefix_normalized):]
@@ -473,12 +487,10 @@ class Client(tornado.web.RequestHandler):
                     self.log.error(f"Conflict detected during manual folder rename: '{new_blob_name}' already exists.")
                     raise ValueError(f"Destination object '{new_blob_name}' already exists. Aborting rename.")
 
-                self.log.info(f"Copying '{blob.name}' to '{new_blob_name}'")
                 new_blob = bucket.copy_blob(blob, bucket, new_name=new_blob_name)
                 renamed_blobs.append(new_blob)
-
+                
             for blob in blobs_to_rename:
-                self.log.info(f"Deleting original '{blob.name}'")
                 blob.delete()
 
             return {

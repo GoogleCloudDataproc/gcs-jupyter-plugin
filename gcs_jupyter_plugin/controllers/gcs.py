@@ -14,10 +14,10 @@
 
 import json
 import os
+import time
 import tempfile
 import aiohttp
 import tornado
-import nbformat
 from jupyter_server.base.handlers import APIHandler
 
 from gcs_jupyter_plugin import credentials
@@ -32,9 +32,9 @@ class ListBucketsController(APIHandler):
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
-
                 buckets = await client.list_buckets()
-            self.finish(json.dumps(buckets))
+            result = json.dumps(buckets)
+            self.finish(result)
         except Exception as e:
             self.log.exception("Error fetching datasets.")
             self.finish({"error": str(e)})
@@ -50,9 +50,10 @@ class ListFilesController(APIHandler):
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
-
                 files = await client.list_files(bucket, prefix)
-            self.finish(json.dumps(files))
+                
+            result = json.dumps(files)
+            self.finish(result)
         except Exception as e:
             self.log.exception("Error fetching datasets")
             self.finish({"error": str(e)})
