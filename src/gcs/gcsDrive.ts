@@ -151,6 +151,7 @@ export class GCSDrive implements Contents.IDrive {
     }
   }
 
+
   /**
    * @returns IModel directory containing all the GCS buckets for the current project.
    */
@@ -324,7 +325,7 @@ export class GCSDrive implements Contents.IDrive {
     const parsedPath = GcsService.pathParser(localPath);
 
     try {
-      this._browserWidget?.showBrowserSpinner();
+      this._browserWidget?.showProgressBar();
       switch (options.type) {
         case 'directory':
           return await this.createNewDirectory(localPath, parsedPath);
@@ -342,7 +343,7 @@ export class GCSDrive implements Contents.IDrive {
           return DIRECTORY_IMODEL;
       }
     } finally {
-      this._browserWidget?.hideBrowserSpinner();
+      this._browserWidget?.hideProgressBar();
     }
   }
 
@@ -636,7 +637,7 @@ export class GCSDrive implements Contents.IDrive {
     try{
       const localPath = GcsService.pathParser(path);
 
-      this._browserWidget?.showBrowserSpinner();
+      this._browserWidget?.showProgressBar();
 
       const response = await GcsService.deleteFile({
         bucket: localPath.bucket,
@@ -658,7 +659,7 @@ export class GCSDrive implements Contents.IDrive {
       }
     }finally{
       await this._browserWidget?.refreshContents();
-      this._browserWidget?.hideBrowserSpinner();
+      this._browserWidget?.hideProgressBar();
     }
   }
 
@@ -705,7 +706,7 @@ export class GCSDrive implements Contents.IDrive {
       return DIRECTORY_IMODEL;
     } else {
       try {
-        this._browserWidget?.showBrowserSpinner();
+        this._browserWidget?.showProgressBar();
 
         if (oldPath.path.includes('UntitledFolder' + untitledFolderSuffix)) {
           oldPath.path = oldPath.path + '/';
@@ -764,7 +765,7 @@ export class GCSDrive implements Contents.IDrive {
         }
       } finally {
         await this._browserWidget?.refreshContents();
-        this._browserWidget?.hideBrowserSpinner();
+        this._browserWidget?.hideProgressBar();
       }
     }
   }
@@ -774,7 +775,7 @@ export class GCSDrive implements Contents.IDrive {
     options?: Contents.IFetchOptions
   ): Promise<string> {
     const path = GcsService.pathParser(localPath);
-    this._browserWidget?.showBrowserSpinner();
+    this._browserWidget?.showProgressBar();
     const fileContent = await GcsService.downloadFile({
       path: path.path,
       bucket: path.bucket,
@@ -809,7 +810,7 @@ export class GCSDrive implements Contents.IDrive {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    this._browserWidget?.hideBrowserSpinner();
+    this._browserWidget?.hideProgressBar();
 
     return Promise.reject(
       'Download initiated successfully through alternative approach.'

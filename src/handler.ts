@@ -27,18 +27,19 @@ export async function requestAPI<T>(
     throw new ServerConnection.NetworkError(error as any);
   }
 
+  const rawResponseText = await response.text();
   const contentType = response.headers.get('Content-Type');
   let data: any; // data can be string or object
 
   if (contentType?.includes('application/json')) {
     try {
-      data = await response.json();
-    } catch (error) {
-      data = await response.text();
+      data = JSON.parse(rawResponseText);
+    } catch (parseError) {
+      data = rawResponseText;
     }
   } else {
     // For all other content types (like text/plain , octet-stream), read as raw text
-    data = await response.text();
+    data = rawResponseText;
   }
 
   if (!response.ok) {

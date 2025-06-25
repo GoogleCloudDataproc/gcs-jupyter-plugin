@@ -215,7 +215,7 @@ class Client(tornado.web.RequestHandler):
             return {"error": str(e)}
 
     async def save_content(
-        self, bucket_name, destination_blob_name, content, uploadFlag
+        self, bucket_name, destination_blob_name, content, upload_flag
     ):
         """Upload content directly to Google Cloud Storage.
 
@@ -241,7 +241,7 @@ class Client(tornado.web.RequestHandler):
             blob = bucket.blob(destination_blob_name)
 
             if (
-                blob.exists() and uploadFlag
+                blob.exists() and upload_flag
             ):  # when uploadFlag false, user is peroforming save. So file should present.
                 return {
                     "name": destination_blob_name,
@@ -270,7 +270,7 @@ class Client(tornado.web.RequestHandler):
             }
 
         except Exception as e:
-            if uploadFlag:
+            if upload_flag:
                 self.log.exception(
                     f"Error uploading content to {destination_blob_name}."
                 )
@@ -294,9 +294,6 @@ class Client(tornado.web.RequestHandler):
                     "error": "Deleting Bucket is not allowed.",
                     "status": 409,
                 }
-
-            # retriving blob
-            blob = bucket_obj.blob(path)
 
             is_file = True
             target_blob = bucket_obj.blob(path)
@@ -378,7 +375,7 @@ class Client(tornado.web.RequestHandler):
             bucket = storage_client.bucket(bucket_name)
             blob = bucket.blob(blob_name)
             # Check if source blob exists
-            isFile = True
+            is_file = True
             if not blob.exists():
                 # It might be a folder, so adding trail slash and checking for a blob (0 byte object will be returned)
                 # using blobs , we can exclude the 0 byte blob and count the children
@@ -406,7 +403,7 @@ class Client(tornado.web.RequestHandler):
                     == blob_name
                 ):
                     # Only 0 byte Object present
-                    isFile = False
+                    is_file = False
                 elif blob_count > 0:
                     self.log.info("Renaming a non-empty folder.")
                     return await self.rename_non_empty_folder(bucket, blob_name, new_name)
@@ -414,26 +411,26 @@ class Client(tornado.web.RequestHandler):
                     return {"error": f"{blob_name} not found", "status": 404}
 
             # Check for availability of new name ( if already present, return error)
-            if isFile:
-                blobNew = bucket.blob(new_name)
+            if is_file:
+                blob_new = bucket.blob(new_name)
 
-                if blobNew.exists():
+                if blob_new.exists():
                     return {
-                        "error": f"A file with name {blobNew.name} already exists in the destination.",
+                        "error": f"A file with name {blob_new.name} already exists in the destination.",
                         "status": 409,
                     }
             else:
                 # Adding Trailing slash to avoid partial match of other folders
-                blobNew = bucket.blob(new_name)
+                blob_new = bucket.blob(new_name)
                 blobs = bucket.list_blobs(prefix=new_name + "/")
                 if any(blobs):
                     return {
-                        "error": f"A folder with name {blobNew.name} already exists in the destination.",
+                        "error": f"A folder with name {blob_new.name} already exists in the destination.",
                         "status": 409,
                     }
 
             # Rename the blob
-            if isFile:
+            if is_file:
                 new_blob = bucket.rename_blob(blob, new_name)
             else:
                 new_blob = bucket.rename_blob(blob, new_name + "/")

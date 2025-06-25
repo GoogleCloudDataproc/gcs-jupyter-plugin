@@ -14,13 +14,14 @@ import {
 } from '@jupyterlab/filebrowser';
 import { IThemeManager } from '@jupyterlab/apputils';
 import { iconStorage, iconStorageDark } from './utils/icon';
- 
+
 /**
 * Initialization data for the gcs-jupyter-plugin extension.
 */
  
 const NAMESPACE = 'gcs-jupyter-plugin:gcsBrowser';
 const PLUGIN_ID = "gcs-jupyter-plugin:plugin";
+
 
 const plugin: JupyterFrontEndPlugin<void> = {
   id: PLUGIN_ID,
@@ -92,6 +93,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
     onThemeChanged();
     app.shell.add(panelGcs, 'left', { rank: 1002 });
     CloudStorageLoggingService.log('Cloud storage is enabled', LOG_LEVEL.INFO);
+
+    // Filter enabling and disabling when left sidebar changes to streamline notebook creation from launcher.
+    app.restored.then(() => {
+      themeManager.themeChanged.connect(onThemeChanged);
+
+      const shellAny = app.shell as any;
+      
+      if (shellAny?._leftHandler?._sideBar?.currentChanged) {
+        shellAny._leftHandler._sideBar.currentChanged.connect((sender: any, args: any) => {
+            defaultBrowser.showFileFilter = true;
+            defaultBrowser.showFileFilter = false;
+        });
+      }
+
+    }).catch(error => {
+      console.error('Error during app restoration:', error);
+    });
+
   }
 };
  

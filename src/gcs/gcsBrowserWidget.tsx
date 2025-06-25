@@ -17,13 +17,11 @@
 import { Widget, PanelLayout } from '@lumino/widgets';
 import { Dialog, ToolbarButton, showDialog, Spinner } from '@jupyterlab/apputils';
 import { FileBrowser } from '@jupyterlab/filebrowser';
-import 'react-toastify/dist/ReactToastify.css';
 import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
 import { TitleWidget } from '../controls/SidePanelTitleWidget';
 import { ProgressBarWidget } from './ProgressBarWidget';
-import { authApi, login, toastifyCustomStyle } from '../utils/utils';
-import { toast } from 'react-toastify';
+import { authApi, login } from '../utils/utils';
 import { Message } from '@lumino/messaging';
 
 import {
@@ -59,6 +57,7 @@ export class GcsBrowserWidget extends Widget {
     this._browser = browser;
 
     this._browser.showLastModifiedColumn = false;
+    /*this._browser.showFileFilter = true;*/
     this._browser.showHiddenFiles = true;
 
     // Create an empty panel layout initially
@@ -77,6 +76,7 @@ export class GcsBrowserWidget extends Widget {
     (this.layout as PanelLayout).addWidget(this._titleWidget);
 
     this._progressBarWidget = new ProgressBarWidget();
+    (this.layout as PanelLayout).addWidget(this._progressBarWidget);
 
 
     // Adding the progress bar container at the last
@@ -90,14 +90,12 @@ export class GcsBrowserWidget extends Widget {
 
     const originalCd = this._browser.model.cd;
     this._browser.model.cd = async (path: string) => {
-        this.showBrowserSpinner();
-        //this.showProgressBar();
+        this.showProgressBar();
         try {
             const result = await originalCd.call(this._browser.model, path);
             return result;
         } finally {
-            this.hideBrowserSpinner();
-            //this.hideProgressBar();
+            this.hideProgressBar();
         }
     };
 
@@ -153,18 +151,6 @@ export class GcsBrowserWidget extends Widget {
 
    protected onAfterAttach(msg: Message): void {
     super.onAfterAttach(msg);
-    if (this._progressBarWidget) {
-      const titleWidgetNode = this._titleWidget.node;
-
-      if (titleWidgetNode?.nextSibling) {
-        this.node.insertBefore(
-          this._progressBarWidget.node,
-          titleWidgetNode.nextSibling
-        );
-      } else {
-        this.node.appendChild(this._progressBarWidget.node);
-      }
-    }
     // Call initialize asynchronously after widget is attached
     void this.initialize();
   }
@@ -207,6 +193,7 @@ export class GcsBrowserWidget extends Widget {
         const file = fileData;
         const reader = new FileReader();
 
+        this.showProgressBar(); // Show spinner for file upload
         reader.onloadend = async () => {
           // Upload the file content to Google Cloud Storage
           const gcsPath = this._browser.model.path.split(':')[1];
@@ -241,10 +228,6 @@ export class GcsBrowserWidget extends Widget {
                 contents: reader.result as string, // assuming contents is a string
                 upload: false
               });
-              toast.success(
-                `${file.name} overwritten successfully.`,
-                toastifyCustomStyle
-              );
             }
           } else {
             await GcsService.saveFile({
@@ -253,16 +236,13 @@ export class GcsBrowserWidget extends Widget {
               contents: reader.result as string, // assuming contents is a string
               upload: true
             });
-            toast.success(
-              `${file.name} uploaded successfully.`,
-              toastifyCustomStyle
-            );
           }
 
           // Optionally, update the FileBrowser model to reflect the newly uploaded file
           // Example: Refresh the current directory
           await this._browser.model.refresh();
         };
+        this.hideProgressBar(); // Hide spinner after file upload is initiated
 
         // Read the file as text
         reader.readAsText(file);
@@ -271,11 +251,11 @@ export class GcsBrowserWidget extends Widget {
   };
 
   private readonly onRefreshButtonClick = async () => {
-    this.showBrowserSpinner(); // Show spinner for explicit refresh
+    this.showProgressBar(); // Show spinner for explicit refresh
     try {
       await this._browser.model.refresh();
     } finally {
-      this.hideBrowserSpinner(); // Hide after refresh completes
+      this.hideProgressBar(); // Hide after refresh completes
     }
   };
 
@@ -423,7 +403,7 @@ export class GcsBrowserWidget extends Widget {
     this._browser.model.pathChanged.disconnect(this.onPathChanged, this);
     this._browser.dispose();
     this.fileInput.removeEventListener('change', this.handleFileUpload);
-    this.hideBrowserSpinner();
+    this.hideProgressBar();
     super.dispose();
   }
 
