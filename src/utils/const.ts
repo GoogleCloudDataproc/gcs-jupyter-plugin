@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 const { version } = require('../../package.json');
 export const VERSION_DETAIL = version;
 
@@ -24,4 +23,4 @@ export const API_HEADER_BEARER = 'Bearer ';
 export const STATUS_SUCCESS = 'SUCCEEDED';
 
 export const NAMESPACE = 'gcs-jupyter-plugin:gcsBrowser';
-export const PLUGIN_ID = "gcs-jupyter-plugin:plugin";
+export const PLUGIN_ID = 'gcs-jupyter-plugin:plugin';

@@ -32,7 +32,6 @@ import {
 } from '../utils/icon';
 
 export class GcsBrowserWidget extends Widget {
-
   private readonly fileInput: HTMLInputElement;
   private readonly newFolder: ToolbarButton;
   private readonly gcsUpload: ToolbarButton;
@@ -43,10 +42,7 @@ export class GcsBrowserWidget extends Widget {
 
   private readonly _titleWidget: TitleWidget;
 
-  constructor(
-    drive: GCSDrive,
-    browser: FileBrowser
-  ) {
+  constructor(drive: GCSDrive, browser: FileBrowser) {
     super();
     this._browser = browser;
 
@@ -71,7 +67,6 @@ export class GcsBrowserWidget extends Widget {
     this._progressBarWidget = new ProgressBarWidget();
     (this.layout as PanelLayout).addWidget(this._progressBarWidget);
 
-
     // Adding the progress bar container at the last
     //this.node.appendChild(this._progressBarContainer);
 
@@ -83,13 +78,13 @@ export class GcsBrowserWidget extends Widget {
 
     const originalCd = this._browser.model.cd;
     this._browser.model.cd = async (path: string) => {
-        this.showProgressBar();
-        try {
-            const result = await originalCd.call(this._browser.model, path);
-            return result;
-        } finally {
-            this.hideProgressBar();
-        }
+      this.showProgressBar();
+      try {
+        const result = await originalCd.call(this._browser.model, path);
+        return result;
+      } finally {
+        this.hideProgressBar();
+      }
     };
 
     this._browser.showFileCheckboxes = false;
@@ -125,7 +120,9 @@ export class GcsBrowserWidget extends Widget {
     this.refreshButton = new ToolbarButton({
       icon: iconGCSRefresh,
       className: 'icon-white',
-      onClick: () => { void this.onRefreshButtonClick(); },
+      onClick: () => {
+        void this.onRefreshButtonClick();
+      },
       tooltip: 'Refresh'
     });
 
@@ -136,10 +133,9 @@ export class GcsBrowserWidget extends Widget {
     this._browser.toolbar.addItem('New Folder', this.newFolder);
     this._browser.toolbar.addItem('File Upload', this.gcsUpload);
     this._browser.toolbar.addItem('Refresh', this.refreshButton);
-
   }
 
-   protected onAfterAttach(msg: Message): void {
+  protected onAfterAttach(msg: Message): void {
     super.onAfterAttach(msg);
     // Call initialize asynchronously after widget is attached
     void this.initialize();
@@ -344,8 +340,7 @@ export class GcsBrowserWidget extends Widget {
   }
 
   private readonly onPathChanged = () => {
-
-    this._browser.showFileFilter = false
+    this._browser.showFileFilter = false;
     this._browser.showFileFilter = true;
 
     const currentPath = this._browser.model.path.split(':')[1];
@@ -366,5 +361,4 @@ export class GcsBrowserWidget extends Widget {
   public get browser(): FileBrowser {
     return this._browser;
   }
-
 }

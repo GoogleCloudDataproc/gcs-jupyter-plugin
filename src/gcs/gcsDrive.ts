@@ -144,13 +144,12 @@ export class GCSDrive implements Contents.IDrive {
 
     const request: Contents.IFetchOptions = options || {};
 
-    if (request.type == 'file' || request.type == 'notebook') {
+    if (request.type === 'file' || request.type === 'notebook') {
       return await this.getFile(localPath, options);
     } else {
       return await this.getDirectory(localPath);
     }
   }
-
 
   /**
    * @returns IModel directory containing all the GCS buckets for the current project.
@@ -199,7 +198,7 @@ export class GCSDrive implements Contents.IDrive {
             path: `${localPath}/${name}`,
             name: name,
             created: new Date().toISOString(),
-            last_modified: new Date().toISOString() 
+            last_modified: new Date().toISOString()
           };
         })
       );
@@ -312,7 +311,7 @@ export class GCSDrive implements Contents.IDrive {
       }
     }
 
-    const localPath = typeof options?.path == 'string' ? options?.path : '';
+    const localPath = typeof options?.path === 'string' ? options?.path : '';
 
     if (localPath === '/' || localPath === '') {
       console.error(
@@ -380,7 +379,7 @@ export class GCSDrive implements Contents.IDrive {
     } else {
       untitledFolderSuffix = '';
     }
-    let folderName = 'UntitledFolder' + untitledFolderSuffix;
+    const folderName = 'UntitledFolder' + untitledFolderSuffix;
 
     const response = await GcsService.createFolder({
       bucket: parsedPath.bucket,
@@ -426,8 +425,8 @@ export class GCSDrive implements Contents.IDrive {
     });
 
     let maxSuffix = 1;
-    let baseFileName = 'untitled';
-    let fileExtension = '.txt';
+    const baseFileName = 'untitled';
+    const fileExtension = '.txt';
 
     if (content.files) {
       content.files.forEach((file: { items: { name: string } }) => {
@@ -606,7 +605,7 @@ export class GCSDrive implements Contents.IDrive {
       this.showSaveSpinner();
       const path = GcsService.pathParser(localPath);
       const content =
-        options?.format == 'json'
+        options?.format === 'json'
           ? JSON.stringify(options.content)
           : options?.content;
       const resp = await GcsService.saveFile({
@@ -623,7 +622,8 @@ export class GCSDrive implements Contents.IDrive {
         created: new Date().toISOString(),
         content: '',
         writable: true,
-        last_modified: (resp as { updated?: string }).updated ?? new Date().toISOString(),
+        last_modified:
+          (resp as { updated?: string }).updated ?? new Date().toISOString(),
         mimetype: '',
         ...options
       };
@@ -633,8 +633,7 @@ export class GCSDrive implements Contents.IDrive {
   }
 
   async delete(path: string): Promise<void> {
-
-    try{
+    try {
       const localPath = GcsService.pathParser(path);
 
       this._browserWidget?.showProgressBar();
@@ -657,7 +656,7 @@ export class GCSDrive implements Contents.IDrive {
           buttons: [Dialog.okButton()]
         });
       }
-    }finally{
+    } finally {
       await this._browserWidget?.refreshContents();
       this._browserWidget?.hideProgressBar();
     }
@@ -787,7 +786,7 @@ export class GCSDrive implements Contents.IDrive {
 
     // if mime not available, then taking default binary type
     const mimeType =
-      typeof mime.lookup(fileName) == 'string'
+      typeof mime.lookup(fileName) === 'string'
         ? String(mime.lookup(fileName))
         : 'application/octet-stream';
 

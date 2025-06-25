@@ -16,7 +16,7 @@ const IndeterminateProgressBarComponent: React.FC = () => {
         border: 'none',
         boxShadow: 'none',
         margin: 0,
-        padding: 0,
+        padding: 0
       }}
     >
       <div
@@ -30,7 +30,7 @@ const IndeterminateProgressBarComponent: React.FC = () => {
           visibility: 'visible',
           opacity: 1,
           margin: 0,
-          padding: 0,
+          padding: 0
         }}
       ></div>
       <style>{`

@@ -51,7 +51,7 @@ class ListFilesController(APIHandler):
                     await credentials.get_cached(), self.log, client_session
                 )
                 files = await client.list_files(bucket, prefix)
-                
+
             result = json.dumps(files)
             self.finish(result)
         except Exception as e:

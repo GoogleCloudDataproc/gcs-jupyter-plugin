@@ -52,7 +52,7 @@ export class GcsService {
    * @see https://cloud.google.com/storage/docs/listing-buckets#rest-list-buckets
    */
   static async listBuckets() {
-    const data = (await requestAPI(`api/storage/listBuckets`)) as any;
+    const data = (await requestAPI('api/storage/listBuckets')) as any;
     return data;
   }
 
@@ -67,11 +67,10 @@ export class GcsService {
     prefix: string;
     bucket: string;
   }) {
+    const url = `api/storage/listFiles?prefix=${encodeURIComponent(prefix)}&bucket=${encodeURIComponent(bucket)}`;
 
-    let url = `api/storage/listFiles?prefix=${encodeURIComponent(prefix)}&bucket=${encodeURIComponent(bucket)}`;
-    
     const data = (await requestAPI(url)) as any;
-    
+
     return data;
   }
 
@@ -236,7 +235,6 @@ export class GcsService {
     name: string;
     format: 'text' | 'json' | 'base64';
   }): Promise<string> {
-
     const response = (await requestAPI(
       `api/storage/downloadFile?bucket=${bucket}&path=${path}&name=${name}&format=${format}`
     )) as any;

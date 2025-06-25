@@ -21,7 +21,7 @@ import { ToastOptions, toast } from 'react-toastify';
 import { CloudStorageLoggingService } from './loggingService';
 import { STATUS_SUCCESS } from './const';
 
-export const toastifyCustomStyle: ToastOptions<{}> = {
+export const toastifyCustomStyle: ToastOptions<Record<string, never>> = {
   hideProgressBar: true,
   autoClose: 60000,
   theme: 'dark',
