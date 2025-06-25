@@ -14,10 +14,10 @@
 
 import json
 import os
+import time
 import tempfile
 import aiohttp
 import tornado
-import nbformat
 from jupyter_server.base.handlers import APIHandler
 
 from gcs_jupyter_plugin import credentials
@@ -32,9 +32,9 @@ class ListBucketsController(APIHandler):
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
-
                 buckets = await client.list_buckets()
-            self.finish(json.dumps(buckets))
+            result = json.dumps(buckets)
+            self.finish(result)
         except Exception as e:
             self.log.exception("Error fetching datasets.")
             self.finish({"error": str(e)})
@@ -50,9 +50,10 @@ class ListFilesController(APIHandler):
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
-
                 files = await client.list_files(bucket, prefix)
-            self.finish(json.dumps(files))
+
+            result = json.dumps(files)
+            self.finish(result)
         except Exception as e:
             self.log.exception("Error fetching datasets")
             self.finish({"error": str(e)})
@@ -125,19 +126,22 @@ class LoadFileController(APIHandler):
         try:
             bucket = self.get_argument("bucket")
             file_path = self.get_argument("path")
-            format = self.get_argument("format")
+            file_format = self.get_argument("format")
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
 
-                file = await client.get_file(bucket, file_path, format)
+                file = await client.get_file(bucket, file_path, file_format)
 
-            if format == "json":
+            if file_format == "json":
+                self.set_header("Content-Type", "application/json")
                 self.finish(json.dumps(file))
-            elif format == "base64":
+            elif file_format == "base64":
+                self.set_header("Content-Type", "application/octet-stream")
                 self.write(file)
             else:
+                self.set_header("Content-Type", "text/plain")
                 self.finish(file)
         except Exception as e:
             self.log.exception("Error fetching file")

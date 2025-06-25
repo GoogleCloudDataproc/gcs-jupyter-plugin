@@ -16,14 +16,14 @@
  */
 import { Widget, PanelLayout } from '@lumino/widgets';
 import { Dialog, ToolbarButton, showDialog } from '@jupyterlab/apputils';
-import { FileBrowser, IFileBrowserFactory } from '@jupyterlab/filebrowser';
-import 'react-toastify/dist/ReactToastify.css';
+import { FileBrowser } from '@jupyterlab/filebrowser';
 import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
 import { TitleWidget } from '../controls/SidePanelTitleWidget';
-import { authApi, login, toastifyCustomStyle } from '../utils/utils';
-import { toast } from 'react-toastify';
-import { Spinner } from '@jupyterlab/apputils';
+import { ProgressBarWidget } from './ProgressBarWidget';
+import { authApi, login } from '../utils/utils';
+import { Message } from '@lumino/messaging';
+
 import {
   iconGCSNewFolder,
   iconGCSRefresh,
@@ -32,32 +32,23 @@ import {
 } from '../utils/icon';
 
 export class GcsBrowserWidget extends Widget {
-  private browser: FileBrowser;
-  private fileInput: HTMLInputElement;
-  private newFolder: ToolbarButton;
-  private gcsUpload: ToolbarButton;
-  private refreshButton: ToolbarButton;
-  private _browserSpinner: Spinner | null = null;
-  private _gcsDrive: GCSDrive;
-  private _contentPanel: HTMLElement | null = null;
-  private _wasBrowserHidden: boolean = false;
+  private readonly fileInput: HTMLInputElement;
+  private readonly newFolder: ToolbarButton;
+  private readonly gcsUpload: ToolbarButton;
+  private readonly refreshButton: ToolbarButton;
+  private readonly _progressBarWidget: ProgressBarWidget;
 
-  constructor(
-    drive: GCSDrive,
-    private fileBrowserFactory: IFileBrowserFactory
-  ) {
+  private readonly _browser: FileBrowser;
+
+  private readonly _titleWidget: TitleWidget;
+
+  constructor(drive: GCSDrive, browser: FileBrowser) {
     super();
-    this._gcsDrive = drive;
-    this.browser = this.fileBrowserFactory.createFileBrowser(
-      'gcs-jupyter-plugin:gcsBrowser',
-      {
-        driveName: this._gcsDrive.name,
-        refreshInterval: 300000 // 5 mins
-      }
-    );
+    this._browser = browser;
 
-    this.browser.showLastModifiedColumn = false;
-    this.browser.showHiddenFiles = true;
+    this._browser.showLastModifiedColumn = false;
+    this._browser.showFileFilter = true;
+    this._browser.showHiddenFiles = true;
 
     // Create an empty panel layout initially
     this.layout = new PanelLayout();
@@ -65,23 +56,41 @@ export class GcsBrowserWidget extends Widget {
     this.node.style.display = 'flex';
     this.node.style.flexDirection = 'column';
 
-    this._contentPanel = this.browser.node;
-    this.browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
-    this.browser.node.style.flexShrink = '1';
-    this.browser.node.style.flexGrow = '1';
+    this._browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
+    this._browser.node.style.flexShrink = '1';
+    this._browser.node.style.flexGrow = '1';
 
-    // Add title widget initially
-    (this.layout as PanelLayout).addWidget(
-      new TitleWidget('Google Cloud Storage', false)
-    );
+    // Title widget for the GCS Browser
+    this._titleWidget = new TitleWidget('Google Cloud Storage', false);
+    (this.layout as PanelLayout).addWidget(this._titleWidget);
+
+    this._progressBarWidget = new ProgressBarWidget();
+    (this.layout as PanelLayout).addWidget(this._progressBarWidget);
+
+    // Adding the progress bar container at the last
+    //this.node.appendChild(this._progressBarContainer);
+
+    // this div not found at the time of constructor call and Post constructor too (onAfterAttach).
+    //const targetElement = this.node.querySelector('.gcs-explorer-refresh-container');
 
     // Listen for changes in the FileBrowser's path
-    this.browser.model.pathChanged.connect(this.onPathChanged, this);
+    this._browser.model.pathChanged.connect(this.onPathChanged, this);
 
-    this.browser.showFileCheckboxes = false;
-    (this.layout as PanelLayout).addWidget(this.browser);
-    this.browser.node.style.flexShrink = '1';
-    this.browser.node.style.flexGrow = '1';
+    const originalCd = this._browser.model.cd;
+    this._browser.model.cd = async (path: string) => {
+      this.showProgressBar();
+      try {
+        const result = await originalCd.call(this._browser.model, path);
+        return result;
+      } finally {
+        this.hideProgressBar();
+      }
+    };
+
+    this._browser.showFileCheckboxes = false;
+    (this.layout as PanelLayout).addWidget(this._browser);
+    this._browser.node.style.flexShrink = '1';
+    this._browser.node.style.flexGrow = '1';
 
     this.newFolder = new ToolbarButton({
       icon: iconGCSNewFolder,
@@ -111,7 +120,9 @@ export class GcsBrowserWidget extends Widget {
     this.refreshButton = new ToolbarButton({
       icon: iconGCSRefresh,
       className: 'icon-white',
-      onClick: this.onRefreshButtonClick,
+      onClick: () => {
+        void this.onRefreshButtonClick();
+      },
       tooltip: 'Refresh'
     });
 
@@ -119,17 +130,20 @@ export class GcsBrowserWidget extends Widget {
     this.newFolder.enabled = false;
     this.gcsUpload.enabled = false;
 
-    this.browser.toolbar.addItem('New Folder', this.newFolder);
-    this.browser.toolbar.addItem('File Upload', this.gcsUpload);
-    this.browser.toolbar.addItem('Refresh', this.refreshButton);
+    this._browser.toolbar.addItem('New Folder', this.newFolder);
+    this._browser.toolbar.addItem('File Upload', this.gcsUpload);
+    this._browser.toolbar.addItem('Refresh', this.refreshButton);
+  }
 
-    // Check configuration and initialize appropriately
-    this.initialize();
+  protected onAfterAttach(msg: Message): void {
+    super.onAfterAttach(msg);
+    // Call initialize asynchronously after widget is attached
+    void this.initialize();
   }
 
   // Function to trigger file input dialog when the upload button is clicked
-  private onUploadButtonClick = () => {
-    if (this.browser.model.path.split(':')[1] !== '') {
+  private readonly onUploadButtonClick = () => {
+    if (this._browser.model.path.split(':')[1] !== '') {
       this.fileInput.click();
     } else {
       showDialog({
@@ -140,9 +154,9 @@ export class GcsBrowserWidget extends Widget {
     }
   };
 
-  private handleFolderCreation = () => {
-    if (this.browser.model.path.split(':')[1] !== '') {
-      this.browser.createNewDirectory();
+  private readonly handleFolderCreation = () => {
+    if (this._browser.model.path.split(':')[1] !== '') {
+      this._browser.createNewDirectory();
     } else {
       showDialog({
         title: 'Create Folder Error',
@@ -153,7 +167,7 @@ export class GcsBrowserWidget extends Widget {
   };
 
   // Function to handle file upload
-  private handleFileUpload = async (event: Event) => {
+  private readonly handleFileUpload = async (event: Event) => {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files || []);
 
@@ -165,9 +179,10 @@ export class GcsBrowserWidget extends Widget {
         const file = fileData;
         const reader = new FileReader();
 
+        this.showProgressBar(); // Show spinner for file upload
         reader.onloadend = async () => {
           // Upload the file content to Google Cloud Storage
-          const gcsPath = this.browser.model.path.split(':')[1];
+          const gcsPath = this._browser.model.path.split(':')[1];
           const path = GcsService.pathParser(gcsPath);
           let filePath;
 
@@ -199,10 +214,6 @@ export class GcsBrowserWidget extends Widget {
                 contents: reader.result as string, // assuming contents is a string
                 upload: false
               });
-              toast.success(
-                `${file.name} overwritten successfully.`,
-                toastifyCustomStyle
-              );
             }
           } else {
             await GcsService.saveFile({
@@ -211,16 +222,13 @@ export class GcsBrowserWidget extends Widget {
               contents: reader.result as string, // assuming contents is a string
               upload: true
             });
-            toast.success(
-              `${file.name} uploaded successfully.`,
-              toastifyCustomStyle
-            );
           }
 
           // Optionally, update the FileBrowser model to reflect the newly uploaded file
           // Example: Refresh the current directory
-          await this.browser.model.refresh();
+          await this._browser.model.refresh();
         };
+        this.hideProgressBar(); // Hide spinner after file upload is initiated
 
         // Read the file as text
         reader.readAsText(file);
@@ -228,8 +236,13 @@ export class GcsBrowserWidget extends Widget {
     }
   };
 
-  private onRefreshButtonClick = async () => {
-    await this.browser.model.refresh();
+  private readonly onRefreshButtonClick = async () => {
+    this.showProgressBar(); // Show spinner for explicit refresh
+    try {
+      await this._browser.model.refresh();
+    } finally {
+      this.hideProgressBar(); // Hide after refresh completes
+    }
   };
 
   private async initialize(): Promise<void> {
@@ -302,65 +315,35 @@ export class GcsBrowserWidget extends Widget {
     }
   }
 
-  public showBrowserSpinner(): void {
-    if (!this._browserSpinner) {
-      this._browserSpinner = new Spinner();
-      this._browserSpinner.node.classList.add('gcs-spinner-overlay');
-      this.browser.node.appendChild(this._browserSpinner.node);
-    }
+  public async refreshContents() {
+    await this._browser.model.refresh();
+  }
 
-    this._browserSpinner.node.style.backgroundColor = 'transparent';
-    this._browserSpinner.show();
-
-    if (this._contentPanel) {
-      this._contentPanel.style.opacity = '0.5';
-      this._contentPanel.style.pointerEvents = 'none';
-    } else {
-      console.warn('Content panel not found in showBrowserSpinner!');
-    }
-
-    this._wasBrowserHidden =
-      this.browser.node.classList.contains('lm-mod-hidden');
-    if (this._wasBrowserHidden) {
-      this.browser.node.classList.remove('lm-mod-hidden');
+  public showProgressBar(): void {
+    if (this._progressBarWidget) {
+      this._progressBarWidget.show();
     }
   }
 
-  public hideBrowserSpinner(): void {
-    if (this._browserSpinner) {
-      this._browserSpinner.hide();
-      if (this._browserSpinner.node.parentElement) {
-        this._browserSpinner.node.parentElement.removeChild(
-          this._browserSpinner.node
-        );
-      } else {
-        console.warn('Spinner parent element not found in hideBrowserSpinner!');
-      }
-
-      if (this._contentPanel) {
-        this._contentPanel.style.opacity = '';
-        this._contentPanel.style.pointerEvents = '';
-      }
-      if (this._wasBrowserHidden) {
-        this.browser.node.classList.add('lm-mod-hidden');
-      }
-      this._wasBrowserHidden = false;
-      this._browserSpinner = null;
-    } else {
-      console.warn('Spinner was not active.');
+  public hideProgressBar(): void {
+    if (this._progressBarWidget) {
+      this._progressBarWidget.hide();
     }
   }
 
   dispose() {
-    this.browser.model.pathChanged.disconnect(this.onPathChanged, this);
-    this.browser.dispose();
+    this._browser.model.pathChanged.disconnect(this.onPathChanged, this);
+    this._browser.dispose();
     this.fileInput.removeEventListener('change', this.handleFileUpload);
-    this.hideBrowserSpinner();
+    this.hideProgressBar();
     super.dispose();
   }
 
-  private onPathChanged = () => {
-    const currentPath = this.browser.model.path.split(':')[1];
+  private readonly onPathChanged = () => {
+    this._browser.showFileFilter = false;
+    this._browser.showFileFilter = true;
+
+    const currentPath = this._browser.model.path.split(':')[1];
     // Check if the current path is the root (empty string or just '/')
     const isRootPath = currentPath === '' || currentPath === '/';
 
@@ -374,4 +357,8 @@ export class GcsBrowserWidget extends Widget {
       this.newFolder.enabled = !isRootPath;
     }
   };
+
+  public get browser(): FileBrowser {
+    return this._browser;
+  }
 }

@@ -5,7 +5,6 @@ from google.cloud import storage
 import datetime
 import json
 import base64
-import nbformat
 
 from gcs_jupyter_plugin.services.gcs import Client
 
@@ -892,7 +891,7 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
         mock_new_blob.exists.assert_called_once()
         mock_bucket.rename_blob.assert_called_once_with(mock_old_blob, new_blob_name)
 
-        self.assertEqual(result["success"], True)
+        self.assertTrue(result["success"])
         self.assertEqual(result["status"], 200)
         self.assertEqual(result["name"], new_blob_name)
         self.assertEqual(result["bucket"], "test-bucket")
