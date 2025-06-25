@@ -15,34 +15,13 @@
  * limitations under the License.
  */
 
-import { requestAPI } from '../handler';
+
 const { version } = require('../../package.json');
 export const VERSION_DETAIL = version;
-
-interface IGcpUrlResponseData {
-  storage_url: string;
-}
-export const gcpServiceUrls = (async () => {
-  const data = (await requestAPI('getGcpServiceUrls')) as IGcpUrlResponseData;
-  const storage_url = new URL(data.storage_url);
-  const storage_upload_url = new URL(data.storage_url);
-
-  if (
-    !storage_url.pathname ||
-    storage_url.pathname === '' ||
-    storage_url.pathname === '/'
-  ) {
-    // If the overwritten  storage_url doesn't contain a path, add it.
-    storage_url.pathname = 'storage/v1/';
-  }
-  storage_upload_url.pathname = 'upload/storage/v1/';
-
-  return {
-    STORAGE: storage_url.toString(),
-    STORAGE_UPLOAD: storage_upload_url.toString()
-  };
-})();
 
 export const API_HEADER_CONTENT_TYPE = 'application/json';
 export const API_HEADER_BEARER = 'Bearer ';
 export const STATUS_SUCCESS = 'SUCCEEDED';
+
+export const NAMESPACE = 'gcs-jupyter-plugin:gcsBrowser';
+export const PLUGIN_ID = "gcs-jupyter-plugin:plugin";

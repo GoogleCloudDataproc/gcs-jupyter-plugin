@@ -25,7 +25,6 @@ import tornado.web
 from google.oauth2 import credentials
 from google.cloud import storage
 
-from gcs_jupyter_plugin import urls
 from gcs_jupyter_plugin.commons.constants import CONTENT_TYPE, STORAGE_SERVICE_NAME
 
 

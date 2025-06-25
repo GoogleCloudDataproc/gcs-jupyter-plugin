@@ -14,13 +14,12 @@ import {
 } from '@jupyterlab/filebrowser';
 import { IThemeManager } from '@jupyterlab/apputils';
 import { iconStorage, iconStorageDark } from './utils/icon';
+import { NAMESPACE, PLUGIN_ID } from './utils/const';
 
 /**
 * Initialization data for the gcs-jupyter-plugin extension.
 */
  
-const NAMESPACE = 'gcs-jupyter-plugin:gcsBrowser';
-const PLUGIN_ID = "gcs-jupyter-plugin:plugin";
 
 
 const plugin: JupyterFrontEndPlugin<void> = {
@@ -76,10 +75,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     gcsDrive.setBrowserWidget(gcsBrowserWidget);
     documentManager.services.contents.addDrive(gcsDrive);
  
-    let panelGcs: Panel | undefined;
-    panelGcs?.dispose();
-    panelGcs = undefined;
-    panelGcs = new Panel();
+    let panelGcs = new Panel();
     panelGcs.id = 'GCS-bucket-tab';
     panelGcs.title.caption = 'Google Cloud Storage';
     panelGcs.title.className = 'panel-icons-custom-style';

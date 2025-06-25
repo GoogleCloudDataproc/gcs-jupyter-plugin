@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 import { Widget, PanelLayout } from '@lumino/widgets';
-import { Dialog, ToolbarButton, showDialog, Spinner } from '@jupyterlab/apputils';
+import { Dialog, ToolbarButton, showDialog } from '@jupyterlab/apputils';
 import { FileBrowser } from '@jupyterlab/filebrowser';
 import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
@@ -39,13 +39,7 @@ export class GcsBrowserWidget extends Widget {
   private readonly refreshButton: ToolbarButton;
   private readonly _progressBarWidget: ProgressBarWidget;
 
-
-
   private readonly _browser: FileBrowser;
-  private _browserSpinner: Spinner | null = null;
-  private readonly _contentPanel: HTMLElement | null = null;
-  private _wasBrowserHidden: boolean = false;
-  private _spinnerRefCount: number = 0;
 
   private readonly _titleWidget: TitleWidget;
 
@@ -57,7 +51,7 @@ export class GcsBrowserWidget extends Widget {
     this._browser = browser;
 
     this._browser.showLastModifiedColumn = false;
-    /*this._browser.showFileFilter = true;*/
+    this._browser.showFileFilter = true;
     this._browser.showHiddenFiles = true;
 
     // Create an empty panel layout initially
@@ -66,7 +60,6 @@ export class GcsBrowserWidget extends Widget {
     this.node.style.display = 'flex';
     this.node.style.flexDirection = 'column';
 
-    this._contentPanel = this._browser.node;
     this._browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
     this._browser.node.style.flexShrink = '1';
     this._browser.node.style.flexGrow = '1';
@@ -143,9 +136,6 @@ export class GcsBrowserWidget extends Widget {
     this._browser.toolbar.addItem('New Folder', this.newFolder);
     this._browser.toolbar.addItem('File Upload', this.gcsUpload);
     this._browser.toolbar.addItem('Refresh', this.refreshButton);
-
-    // Check configuration and initialize appropriately
-    // this.initialize();
 
   }
 
@@ -329,62 +319,8 @@ export class GcsBrowserWidget extends Widget {
     }
   }
 
-  public showBrowserSpinner(): void {
-    this._spinnerRefCount++;
-    if (!this._browserSpinner) {
-      this._browserSpinner = new Spinner();
-      this._browserSpinner.node.classList.add('gcs-spinner-overlay');
-      this._browser.node.appendChild(this._browserSpinner.node);
-    }
-
-    this._browserSpinner.node.style.backgroundColor = 'transparent';
-    this._browserSpinner.show();
-
-    if (this._contentPanel) {
-      this._contentPanel.style.opacity = '0.5';
-      this._contentPanel.style.pointerEvents = 'none';
-    } else {
-      console.warn('Content panel not found in showBrowserSpinner!');
-    }
-
-    this._wasBrowserHidden =
-      this._browser.node.classList.contains('lm-mod-hidden');
-    if (this._wasBrowserHidden) {
-      this._browser.node.classList.remove('lm-mod-hidden');
-    }
-  }
-
   public async refreshContents() {
     await this._browser.model.refresh();
-  }
-
-  public async hideBrowserSpinner(): Promise<void> {
-    this._spinnerRefCount--;
-    if (this._spinnerRefCount <= 0) { // Only hide if no more active requests
-      this._spinnerRefCount = 0;
-      if (this._browserSpinner) {
-        this._browserSpinner.hide();
-        if (this._browserSpinner.node.parentElement) {
-          this._browserSpinner.node.parentElement.removeChild(
-            this._browserSpinner.node
-          );
-        } else {
-          console.warn('Spinner parent element not found in hideBrowserSpinner!');
-        }
-
-        if (this._contentPanel) {
-          this._contentPanel.style.opacity = '';
-          this._contentPanel.style.pointerEvents = '';
-        }
-        if (this._wasBrowserHidden) {
-          this._browser.node.classList.add('lm-mod-hidden');
-        }
-        this._wasBrowserHidden = false;
-        this._browserSpinner = null;
-      } else {
-        console.warn('Spinner was not active.');
-      }
-    }
   }
 
   public showProgressBar(): void {
@@ -408,6 +344,10 @@ export class GcsBrowserWidget extends Widget {
   }
 
   private readonly onPathChanged = () => {
+
+    this._browser.showFileFilter = false
+    this._browser.showFileFilter = true;
+
     const currentPath = this._browser.model.path.split(':')[1];
     // Check if the current path is the root (empty string or just '/')
     const isRootPath = currentPath === '' || currentPath === '/';
