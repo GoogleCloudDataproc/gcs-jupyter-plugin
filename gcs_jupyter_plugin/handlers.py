@@ -22,13 +22,15 @@ from gcs_jupyter_plugin.controllers.gcs import (
     DownloadFileController,
 )
 
+
 class GcsPluginConfig(SingletonConfigurable):
     log_path = Unicode(
         "",
         config=True,
         help="File to log ServerApp and Gcs Jupyter Plugin events.",
     )
-    
+
+
 class LoginHandler(APIHandler):
     @tornado.web.authenticated
     async def post(self):
