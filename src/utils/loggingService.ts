@@ -12,7 +12,7 @@ export enum LOG_LEVEL {
   CRITICAL = 50
 }
 
-export class DataprocLoggingService {
+export class CloudStorageLoggingService {
   /**
    * Helper method to attach a log listener to the toplevel handler.
    */
@@ -27,7 +27,7 @@ export class DataprocLoggingService {
           const formattedMessage = `Error: ${filename}:${lineno}:${colno}\n${stack}\n${message}\n${JSON.stringify(
             error
           )}`;
-          DataprocLoggingService.log(formattedMessage, LOG_LEVEL.ERROR);
+          CloudStorageLoggingService.log(formattedMessage, LOG_LEVEL.ERROR);
           return;
         }
         // TODO: Add fallback if e is not an errorevent.

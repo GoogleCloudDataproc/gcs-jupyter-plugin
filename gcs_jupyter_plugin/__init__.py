@@ -13,7 +13,7 @@ import logging
 from google.cloud.jupyter_config.tokenrenewer import CommandTokenRenewer
 from jupyter_server.services.sessions.sessionmanager import SessionManager
 
-from .handlers import setup_handlers
+from .handlers import setup_handlers, GcsPluginConfig
 
 
 def _jupyter_labextension_paths():
@@ -25,26 +25,15 @@ def _jupyter_server_extension_points():
 
 
 def _link_jupyter_server_extension(server_app):
-
-    c = server_app.config
-
-    c.DelegatingWebsocketConnection.kernel_ws_protocol = ""
-
-    c.GatewayClient.auth_scheme = "Bearer"
-    c.GatewayClient.headers = '{"Cookie": "_xsrf=XSRF", "X-XSRFToken": "XSRF"}'
-    c.GatewayClient.gateway_token_renewer_class = CommandTokenRenewer
-    c.CommandTokenRenewer.token_command = (
-        'gcloud config config-helper --format="value(credential.access_token)"'
-    )
-
-    # Version 2.8.0 of the `jupyter_server` package requires the `auth_token`
-    # value to be set to a non-empty value or else it will never invoke the
-    # token renewer. To accommodate this, we set it to an invalid initial
-    # value that will be immediately replaced by the token renewer.
-    #
-    # See https://github.com/jupyter-server/jupyter_server/issues/1339 for more
-    # details and discussion.
-    c.GatewayClient.auth_token = "Initial, invalid value"
+    plugin_config = GcsPluginConfig.instance(parent=server_app)
+    if plugin_config.log_path != "":
+        file_handler = logging.handlers.RotatingFileHandler(
+            plugin_config.log_path, maxBytes=2 * 1024 * 1024, backupCount=5
+        )
+        file_handler.setFormatter(
+            logging.Formatter("[%(levelname)s %(asctime)s %(name)s] %(message)s")
+        )
+        server_app.log.addHandler(file_handler)
 
 
 def _load_jupyter_server_extension(server_app):

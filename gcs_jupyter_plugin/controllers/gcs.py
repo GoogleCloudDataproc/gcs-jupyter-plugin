@@ -13,29 +13,27 @@
 # limitations under the License.
 
 import json
-import os
-import tempfile
 import aiohttp
 import tornado
-import nbformat
 from jupyter_server.base.handlers import APIHandler
 
 from gcs_jupyter_plugin import credentials
 from gcs_jupyter_plugin.services import gcs
+
+from gcs_jupyter_plugin.commons.constants import MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE
 
 
 class ListBucketsController(APIHandler):
     @tornado.web.authenticated
     async def get(self):
         try:
-            prefix = self.get_argument("prefix")
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
-
-                buckets = await client.list_buckets(prefix)
-            self.finish(json.dumps(buckets))
+                buckets = await client.list_buckets()
+            result = json.dumps(buckets)
+            self.finish(result)
         except Exception as e:
             self.log.exception("Error fetching datasets.")
             self.finish({"error": str(e)})
@@ -51,9 +49,10 @@ class ListFilesController(APIHandler):
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
-
                 files = await client.list_files(bucket, prefix)
-            self.finish(json.dumps(files))
+
+            result = json.dumps(files)
+            self.finish(result)
         except Exception as e:
             self.log.exception("Error fetching datasets")
             self.finish({"error": str(e)})
@@ -70,7 +69,7 @@ class CreateFolderController(APIHandler):
 
             if not bucket or not folder_name:
                 self.set_status(400)
-                self.finish({"error": "Missing required parameters."})
+                self.finish({"error": MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE})
                 return
 
             async with aiohttp.ClientSession() as client_session:
@@ -94,17 +93,17 @@ class SaveFileController(APIHandler):
             bucket = self.get_body_argument("bucket", None)
             destination_path = self.get_body_argument("path", None)
             content = self.get_body_argument("contents", "")
-            uploadFlag = True if self.get_body_argument("upload") == "true" else False
+            upload_flag = True if self.get_body_argument("upload") == "true" else False
 
             if not bucket or not destination_path:
                 self.set_status(400)
-                self.finish(json.dumps({"error": "Missing required parameters."}))
+                self.finish(json.dumps({"error": MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE}))
                 return
 
             # Use the client to upload the content
             storage_client = gcs.Client(await credentials.get_cached(), self.log, None)
             result = await storage_client.save_content(
-                bucket, destination_path, content, uploadFlag
+                bucket, destination_path, content, upload_flag
             )
 
             if isinstance(result, dict) and "error" in result:
@@ -126,24 +125,26 @@ class LoadFileController(APIHandler):
         try:
             bucket = self.get_argument("bucket")
             file_path = self.get_argument("path")
-            format = self.get_argument("format")
+            file_format = self.get_argument("format")
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
 
-                file = await client.get_file(bucket, file_path, format)
+                file = await client.get_file(bucket, file_path, file_format)
 
-            # If .ipynb file, then sanitizing
-            if file_path.endswith(".ipynb") and format == "json":
-                file = nbformat.reads(file, 4, capture_validation_error=True)
+            if file_format == "json":
+                self.set_header("Content-Type", "application/json")
                 self.finish(json.dumps(file))
-            elif format == "base64":
+            elif file_format == "base64":
+                self.set_header("Content-Type", "application/octet-stream")
                 self.write(file)
             else:
+                self.set_header("Content-Type", "text/plain")
                 self.finish(file)
         except Exception as e:
             self.log.exception("Error fetching file")
+            self.set_status(404)
             self.finish({"error": str(e)})
 
 
@@ -249,17 +250,17 @@ class DownloadFileController(APIHandler):
             bucket = self.get_argument("bucket")
             file_path = self.get_argument("path")
             name = self.get_argument("name")
-            format = self.get_argument("format")
+            file_format = self.get_argument("format")
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
                 file_content = await client.download_file(
-                    bucket, file_path, name, format
+                    bucket, file_path, name, file_format
                 )
 
                 self.finish(file_content)
-            
+
         except Exception as e:
             self.log.exception("Error fetching file")
             self.finish({"error": str(e)})
