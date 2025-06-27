@@ -20,9 +20,7 @@ from jupyter_server.base.handlers import APIHandler
 from gcs_jupyter_plugin import credentials
 from gcs_jupyter_plugin.services import gcs
 
-from commons.constants import (
-    MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE,
-)
+from gcs_jupyter_plugin.commons.constants import MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE
 
 
 class ListBucketsController(APIHandler):

@@ -1228,11 +1228,6 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
             bucket_name, file_path, file_format
         )
 
-        processed_nb_json_string = json.dumps(processed_nb_object, indent=2)
-
-        # self.assertNotIn('trusted', processed_nb_object.metadata,
-        #                  "The 'trusted' flag should be cleared from notebook metadata after nbformat.reads")
-
         # verify that 'trusted' is cleared from individual cell metadata
         for i, cell in enumerate(processed_nb_object.cells):
             self.assertNotIn(
