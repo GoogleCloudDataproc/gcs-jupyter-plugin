@@ -340,6 +340,7 @@ export class GcsBrowserWidget extends Widget {
   }
 
   private readonly onPathChanged = () => {
+    // The below 2 lines of code is added as a workaround for switching to corresponding filebrowser context
     this._browser.showFileFilter = false;
     this._browser.showFileFilter = true;
 
