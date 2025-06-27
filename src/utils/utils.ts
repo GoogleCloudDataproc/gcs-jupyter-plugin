@@ -18,10 +18,10 @@
 import { requestAPI } from '../handler';
 import { ToastOptions, toast } from 'react-toastify';
 
-import { DataprocLoggingService } from './loggingService';
+import { CloudStorageLoggingService } from './loggingService';
 import { STATUS_SUCCESS } from './const';
 
-export const toastifyCustomStyle: ToastOptions<{}> = {
+export const toastifyCustomStyle: ToastOptions<Record<string, never>> = {
   hideProgressBar: true,
   autoClose: 60000,
   theme: 'dark',
@@ -91,6 +91,6 @@ export async function loggedFetch(
 ): Promise<Response> {
   const resp = await fetch(input, init);
   // Intentionally not waiting for log response.
-  DataprocLoggingService.logFetch(input, init, resp);
+  CloudStorageLoggingService.logFetch(input, init, resp);
   return resp;
 }

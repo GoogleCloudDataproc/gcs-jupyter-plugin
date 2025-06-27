@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "gcs_jupyter_plugin"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = { file = "third-party-licenses.txt" }
 requires-python = ">=3.9"
 classifiers = [
     "Framework :: Jupyter",

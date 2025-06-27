@@ -12,25 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import asyncio
 import json
 import os
 import io
-import aiohttp
-import mimetypes
 import base64
 from datetime import timedelta
+import nbformat
 
-import tornado.ioloop
 import tornado.web
-
-from tornado import gen
 
 from google.oauth2 import credentials
 from google.cloud import storage
-import proto
 
-from gcs_jupyter_plugin import urls
 from gcs_jupyter_plugin.commons.constants import CONTENT_TYPE, STORAGE_SERVICE_NAME
 
 
@@ -55,9 +49,15 @@ class Client(tornado.web.RequestHandler):
             token = self._access_token
             project = self.project_id
             creds = credentials.Credentials(token)
-            client = storage.Client(project=project, credentials=creds)
-            buckets = client.list_buckets()
-            buckets = client.list_buckets(prefix=prefix)
+
+            loop = asyncio.get_running_loop()
+
+            def _get_buckets_from_gcs():
+                client = storage.Client(project=project, credentials=creds)
+                return client.list_buckets(prefix=prefix)
+
+            buckets = await loop.run_in_executor(None, _get_buckets_from_gcs)
+
             for bucket in buckets:
                 bucket_list.append(
                     {
@@ -83,46 +83,26 @@ class Client(tornado.web.RequestHandler):
             token = self._access_token
             project = self.project_id
             creds = credentials.Credentials(token)
-            client = storage.Client(project=project, credentials=creds)
-            blobs = client.list_blobs(bucket, prefix=prefix, delimiter="/")
-            bucketObj = client.bucket(bucket)
-            files = list(blobs)
 
-            # Prefixes dont have created / updated at data with Object. So we have to run through loop
-            # and hit client.list_blobs() with each prefix to load blobs to get updated date info ( we can set max_result=1 ).
-            # This is taking time when loop runs. So to avoid this, Grouping prefix with updated/created date
-            prefix_latest_updated = {}
-            if blobs.prefixes:
-                all_blobs_under_prefix = client.list_blobs(bucket, prefix=prefix)
-                for blob in all_blobs_under_prefix:
-                    relative_name = blob.name[len(prefix or "") :]
-                    parts = relative_name.split("/", 1)
-                    if len(parts) > 1:
-                        subdirectory = prefix + parts[0] + "/"
-                        if subdirectory in blobs.prefixes:
-                            if subdirectory not in prefix_latest_updated or (
-                                blob.updated
-                                and prefix_latest_updated[subdirectory] < blob.updated
-                            ):
-                                prefix_latest_updated[subdirectory] = blob.updated
+            loop = asyncio.get_running_loop()
+
+            def _get_blobs_from_gcs():
+                client = storage.Client(project=project, credentials=creds)
+                return client.list_blobs(
+                    bucket,
+                    prefix=prefix,
+                    delimiter="/",
+                    fields="items(name,size,timeCreated,updated,contentType),prefixes",
+                )
+
+            blobs = await loop.run_in_executor(None, _get_blobs_from_gcs)
+
+            files = list(blobs)
 
             # Adding Sub-directories
             if blobs.prefixes:
                 for pref in blobs.prefixes:
-
-                    subdir_name = pref[:-1]
-                    subdir_list.append(
-                        {
-                            "prefixes": {
-                                "name": pref,
-                                "updatedAt": (
-                                    prefix_latest_updated.get(pref).isoformat()
-                                    if prefix_latest_updated.get(pref)
-                                    else ""
-                                ),
-                            }
-                        }
-                    )
+                    subdir_list.append({"prefixes": {"name": pref}})
 
             # Adding Files
             for file in files:
@@ -167,8 +147,14 @@ class Client(tornado.web.RequestHandler):
                 try:
                     base64_encoded = base64.b64encode(file_content).decode("utf-8")
                     return base64_encoded
-                except Exception as encode_error:
+                except Exception:
                     return []
+
+            if file_path.endswith(".ipynb"):
+                file_content = blob.download_as_text()
+                return nbformat.reads(
+                    file_content, as_version=4, capture_validation_error=True
+                )
             elif format == "json":
                 file_content = blob.download_as_text()
                 return file_content
@@ -176,8 +162,7 @@ class Client(tornado.web.RequestHandler):
                 return blob.download_as_text()
 
         except Exception as e:
-            self.log.exception(f"Error getting file: {e}")
-            return []  # Return empty list on error.
+            raise e
 
     async def create_folder(self, bucket, path, folder_name):
         try:
@@ -223,7 +208,7 @@ class Client(tornado.web.RequestHandler):
             return {"error": str(e)}
 
     async def save_content(
-        self, bucket_name, destination_blob_name, content, uploadFlag
+        self, bucket_name, destination_blob_name, content, upload_flag
     ):
         """Upload content directly to Google Cloud Storage.
 
@@ -249,7 +234,7 @@ class Client(tornado.web.RequestHandler):
             blob = bucket.blob(destination_blob_name)
 
             if (
-                blob.exists() and uploadFlag
+                blob.exists() and upload_flag
             ):  # when uploadFlag false, user is peroforming save. So file should present.
                 return {
                     "name": destination_blob_name,
@@ -278,7 +263,7 @@ class Client(tornado.web.RequestHandler):
             }
 
         except Exception as e:
-            if uploadFlag:
+            if upload_flag:
                 self.log.exception(
                     f"Error uploading content to {destination_blob_name}."
                 )
@@ -303,50 +288,72 @@ class Client(tornado.web.RequestHandler):
                     "status": 409,
                 }
 
-            # retriving blob
-            blob = bucket_obj.blob(path)
-
-            isFile = True
-
-            if not blob.exists():
-                # using blobs , we can exclude the 0 byte blob and count the children
-                blobs = bucket_obj.list_blobs(prefix=path + "/")
-
-                blob_count = 0
-                for iblob in blobs:
-                    # For empty folders, gcs creates a zero-byte object with a trailing slash to simulate a folder.
-                    # here we exclude that 0 byte object.
-                    blob = iblob
-                    isFile = False
-                    if (
-                        iblob.name[:-1] if iblob.name.endswith("/") else iblob.name
-                    ) != path:
-                        blob_count += 1
-                        # breaking the loop here, since we just want to know whether at-least 1 file present or not.
-                        # Folder cannot be deleted even if 1 file/folder present
-                        break
-
-                if blob_count > 0:
-                    return {
-                        "error": "Non-Empty folder cannot be deleted.",
-                        "status": 409,
-                    }
-
-            # Checking whether blob exists
-            if not blob.exists():
-                # Without trailing slash, 0 byte object wont be pointed out.
-                # So, In the case of Empty folder, blob.exists() returns false and causes 404.
-                blob = bucket_obj.blob(path + "/")
-                if not blob.exists():
+            is_file = True
+            target_blob = bucket_obj.blob(path)
+            if target_blob.exists():
+                # It's a file or a 0-byte folder marker
+                if target_blob.size == 0 and target_blob.name.endswith("/"):
+                    # It's explicitly an empty folder marker
+                    is_file = False
+                else:
+                    # It's a regular file
+                    is_file = True
+            else:
+                # If the exact blob doesn't exist, check if it's a folder (prefix)
+                # We append '/' to the path to check for objects *within* that folder.
+                blobs_under_prefix = list(bucket_obj.list_blobs(prefix=path + "/"))
+                if len(blobs_under_prefix) > 0:
+                    is_file = False
+                elif bucket_obj.blob(path + "/").exists():
+                    # It might be a 0-byte object created for an empty folder
+                    is_file = False
+                else:
                     return {"error": "File/Folder not found.", "status": 404}
 
-            # Attempt to delete the blob
-            try:
-                blob.delete()
-                return {"success": True}
-            except Exception as e:
-                self.log.exception(f"Error deleting file/folder {path}.")
-                return {"error": str(e), "status": 500}
+            if is_file:
+                # Delete a single file
+                try:
+                    target_blob.delete()
+                    self.log.info(f"Successfully deleted file: {path}")
+                    return {"success": True, "status": 200}
+                except Exception as e:
+                    self.log.exception(f"Error deleting file {path}.")
+                    return {"error": str(e), "status": 500}
+            else:
+                # Delete a folder (recursively delete all blobs with the prefix)
+                folder_prefix = path if path.endswith("/") else path + "/"
+                self.log.info(f"Attempting to delete non-empty folder: {folder_prefix}")
+                try:
+                    blobs_to_delete = list(bucket_obj.list_blobs(prefix=folder_prefix))
+                    if not blobs_to_delete:
+                        # This case handles if list_blobs returns empty for some reason,
+                        # but we already determined it's a folder, possibly an empty marker.
+                        # Try deleting the 0-byte marker if it exists.
+                        empty_folder_blob = bucket_obj.blob(folder_prefix)
+                        if empty_folder_blob.exists() and empty_folder_blob.size == 0:
+                            empty_folder_blob.delete()
+                            self.log.info(
+                                f"Successfully deleted empty folder marker: {folder_prefix}"
+                            )
+                            return {"success": True, "status": 200}
+                        else:
+                            return {
+                                "error": f"Folder '{path}' found no contents to delete.",
+                                "status": 404,
+                            }
+
+                    for blob_to_delete in blobs_to_delete:
+                        self.log.info(f"Deleting blob: {blob_to_delete.name}")
+                        blob_to_delete.delete()
+
+                    self.log.info(
+                        f"Successfully deleted non-empty folder and its contents: {path}"
+                    )
+                    return {"success": True, "status": 200}
+
+                except Exception as e:
+                    self.log.exception(f"Error deleting non-empty folder {path}.")
+                    return {"error": str(e), "status": 500}
 
         except Exception as e:
             self.log.exception(f"Error deleting file {path}.")
@@ -367,7 +374,7 @@ class Client(tornado.web.RequestHandler):
             bucket = storage_client.bucket(bucket_name)
             blob = bucket.blob(blob_name)
             # Check if source blob exists
-            isFile = True
+            is_file = True
             if not blob.exists():
                 # It might be a folder, so adding trail slash and checking for a blob (0 byte object will be returned)
                 # using blobs , we can exclude the 0 byte blob and count the children
@@ -395,36 +402,36 @@ class Client(tornado.web.RequestHandler):
                     == blob_name
                 ):
                     # Only 0 byte Object present
-                    isFile = False
+                    is_file = False
                 elif blob_count > 0:
-                    return {
-                        "error": "Non-Empty folder cannot be renamed.",
-                        "status": 409,
-                    }
+                    self.log.info("Renaming a non-empty folder.")
+                    return await self.rename_non_empty_folder(
+                        bucket, blob_name, new_name
+                    )
                 else:
                     return {"error": f"{blob_name} not found", "status": 404}
 
             # Check for availability of new name ( if already present, return error)
-            if isFile:
-                blobNew = bucket.blob(new_name)
+            if is_file:
+                blob_new = bucket.blob(new_name)
 
-                if blobNew.exists():
+                if blob_new.exists():
                     return {
-                        "error": f"A file with name {blobNew.name} already exists in the destination.",
+                        "error": f"A file with name {blob_new.name} already exists in the destination.",
                         "status": 409,
                     }
             else:
                 # Adding Trailing slash to avoid partial match of other folders
-                blobNew = bucket.blob(new_name)
+                blob_new = bucket.blob(new_name)
                 blobs = bucket.list_blobs(prefix=new_name + "/")
                 if any(blobs):
                     return {
-                        "error": f"A folder with name {blobNew.name} already exists in the destination.",
+                        "error": f"A folder with name {blob_new.name} already exists in the destination.",
                         "status": 409,
                     }
 
             # Rename the blob
-            if isFile:
+            if is_file:
                 new_blob = bucket.rename_blob(blob, new_name)
             else:
                 new_blob = bucket.rename_blob(blob, new_name + "/")
@@ -440,6 +447,93 @@ class Client(tornado.web.RequestHandler):
         except Exception as e:
             self.log.exception(f"Error renaming from {blob_name} to {new_name}.")
             return {"error": str(e), "status": 500}
+
+    async def rename_non_empty_folder(
+        self, bucket: storage.Bucket, source_prefix: str, new_prefix: str
+    ):
+        source_prefix_normalized = (
+            source_prefix if source_prefix.endswith("/") else source_prefix + "/"
+        )
+        new_prefix_normalized = (
+            new_prefix if new_prefix.endswith("/") else new_prefix + "/"
+        )
+
+        blobs_to_rename = list(bucket.list_blobs(prefix=source_prefix_normalized))
+
+        if not blobs_to_rename:
+            empty_folder_blob = bucket.blob(source_prefix_normalized)
+            if empty_folder_blob.exists() and empty_folder_blob.size == 0:
+                self.log.info(
+                    f"Renaming empty folder marker '{source_prefix_normalized}' to '{new_prefix_normalized}'."
+                )
+                new_blob = bucket.rename_blob(empty_folder_blob, new_prefix_normalized)
+                return {
+                    "name": new_blob.name,
+                    "bucket": bucket.name,
+                    "success": True,
+                    "status": 200,
+                    "message": "Empty folder marker renamed.",
+                }
+            else:
+                return {
+                    "error": f"Folder '{source_prefix}' not found or has no objects to rename.",
+                    "status": 404,
+                }
+
+        if (
+            new_prefix_normalized.startswith(source_prefix_normalized)
+            and new_prefix_normalized != source_prefix_normalized
+        ):
+            return {
+                "error": f"Cannot rename folder '{source_prefix}' to a sub-path of itself '{new_prefix}'.",
+                "status": 400,
+            }
+
+        renamed_blobs = []
+        try:
+            for blob in blobs_to_rename:
+                relative_path = blob.name[len(source_prefix_normalized) :]
+                new_blob_name = new_prefix_normalized + relative_path
+
+                if bucket.blob(new_blob_name).exists():
+                    self.log.error(
+                        f"Conflict detected during manual folder rename: '{new_blob_name}' already exists."
+                    )
+                    raise ValueError(
+                        f"Destination object '{new_blob_name}' already exists. Aborting rename."
+                    )
+
+                new_blob = bucket.copy_blob(blob, bucket, new_name=new_blob_name)
+                renamed_blobs.append(new_blob)
+
+            for blob in blobs_to_rename:
+                blob.delete()
+
+            return {
+                "message": f"Folder '{source_prefix}' and its contents renamed to '{new_prefix}'.",
+                "bucket": bucket.name,
+                "success": True,
+                "status": 200,
+            }
+        except Exception as e:
+            self.log.error(
+                f"Error during manual folder rename. Attempting to revert changes: {e}"
+            )
+            for blob in renamed_blobs:
+                original_blob_name = (
+                    source_prefix_normalized + blob.name[len(new_prefix_normalized) :]
+                )
+                try:
+                    self.log.warning(
+                        f"Attempting to revert '{blob.name}' to '{original_blob_name}'"
+                    )
+                    bucket.copy_blob(blob, bucket, new_name=original_blob_name)
+                    blob.delete()
+                except Exception as revert_e:
+                    self.log.error(
+                        f"Failed to revert blob '{blob.name}' to '{original_blob_name}': {revert_e}"
+                    )
+            raise
 
     async def download_file(self, bucket_name, file_path, name, format):
         try:
