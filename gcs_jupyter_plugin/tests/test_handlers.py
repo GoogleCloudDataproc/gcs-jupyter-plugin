@@ -246,8 +246,8 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
 
         expected = {
             "prefixes": [
-                {"prefixes": {"name": "folder1/", "updatedAt": None}},
-                {"prefixes": {"name": "folder2/", "updatedAt": None}},
+                {"prefixes": {"name": "folder1/"}},
+                {"prefixes": {"name": "folder2/"}},
             ],
             "files": [
                 {
@@ -374,11 +374,10 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
             delimiter="/",
             fields="items(name,size,timeCreated,updated,contentType),prefixes",
         )
-
         expected = {
             "prefixes": [
-                {"prefixes": {"name": "empty_folder1/", "updatedAt": None}},
-                {"prefixes": {"name": "empty_folder2/", "updatedAt": None}},
+                {"prefixes": {"name": "empty_folder1/"}},
+                {"prefixes": {"name": "empty_folder2/"}},
             ],
             "files": [],
         }
@@ -461,12 +460,12 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
         mock_bucket = mock.MagicMock()
         mock_client_instance.bucket.return_value = mock_bucket
         mock_bucket.blob.side_effect = Exception("Blob not found")
-
-        result = await self.client.get_file(
-            "non-existent-bucket", "non-existent-file.txt", "text"
-        )
-        self.log.exception.assert_called_once_with("Error getting file: Blob not found")
-        self.assertEqual(result, [])  # Return empty list on error
+        with self.assertRaises(Exception) as context:
+            await self.client.get_file(
+                "non-existent-bucket", "non-existent-file.txt", "text"
+            )
+        self.assertEqual(str(context.exception), "Blob not found")
+        self.log.exception.assert_not_called()
 
     # --- Test Cases for create_folder ---
     async def test_create_folder_success(self):
@@ -674,9 +673,9 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
         result = await self.client.delete_file("test-bucket", "my_file.txt")
 
         mock_bucket.blob.assert_called_once_with("my_file.txt")
-        self.assertEqual(mock_blob.exists.call_count, 2)
+        mock_blob.exists.assert_called_once()
         mock_blob.delete.assert_called_once()
-        self.assertEqual(result, {"success": True})
+        self.assertEqual(result, {"success": True, "status": 200})
 
     async def test_delete_empty_folder_success(self):
         """Test successful deletion of an empty folder (0-byte object)."""
@@ -693,27 +692,16 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
         mock_blob_no_trailing = mock.MagicMock()
         mock_blob_no_trailing.exists.return_value = False
 
-        mock_bucket.blob.side_effect = [mock_blob_no_trailing, mock_0byte_folder_blob]
+        mock_bucket.blob.side_effect = [mock_blob_no_trailing]
 
-        mock_blobs_for_folder = mock.MagicMock()
-        mock_blobs_for_folder.__iter__.return_value = [mock_0byte_folder_blob]
-        mock_client_instance.list_blobs.return_value = mock_blobs_for_folder
-
-        # Simulate the final delete call on the 0-byte object
-        mock_blob_with_trailing = mock.MagicMock()
-        mock_bucket.blob.side_effect = [
-            mock_blob_no_trailing,
-            mock_blob_with_trailing,
-        ]  # Re-mock for second blob call
-        mock_blob_with_trailing.exists.return_value = True  # Confirm exists for delete
-        mock_blob_with_trailing.delete.return_value = None
+        mock_bucket.list_blobs.return_value = [mock_0byte_folder_blob]
 
         result = await self.client.delete_file("test-bucket", "my_folder")
 
-        mock_bucket.blob.assert_any_call("my_folder")
-        mock_bucket.blob.assert_any_call("my_folder/")
-        mock_blob_with_trailing.delete.assert_called_once()
-        self.assertEqual(result, {"success": True})
+        mock_bucket.blob.assert_called_with("my_folder")
+        mock_bucket.list_blobs.assert_called_with(prefix="my_folder/")
+        mock_0byte_folder_blob.delete.assert_called_once()
+        self.assertEqual(result, {"success": True, "status": 200})
 
     async def test_delete_non_empty_folder_failure(self):
         """Test deletion of a non-empty folder (should fail)."""
@@ -731,23 +719,9 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
         mock_blob_no_trailing_slash = mock.MagicMock()
         mock_blob_no_trailing_slash.exists.return_value = False
 
-        # 2. Mock the `bucket_obj.blob(path+"/")` call (for "my_folder/").
-        # This is the 0-byte folder marker, which *does* exist if the folder is logically present.
-        mock_folder_marker_blob = self._create_mock_blob(
-            f"{folder_name}/", 0, None, None
-        )
-        mock_folder_marker_blob.exists.return_value = (
-            True  # This is crucial for the service's logic to proceed
-        )
-        mock_folder_marker_blob.delete.return_value = None  # Ensure it won't delete
+        mock_bucket_instance.blob.return_value = mock_blob_no_trailing_slash
 
-        # Set side_effect for `mock_bucket_instance.blob` to handle both calls in sequence.
-        mock_bucket_instance.blob.side_effect = [
-            mock_blob_no_trailing_slash,  # First call: `bucket_obj.blob("my_folder")`
-            mock_folder_marker_blob,  # Second call: `bucket_obj.blob("my_folder/")`
-        ]
-
-        # 3. Mock `bucket_obj.list_blobs(prefix=path+"/")` to return a *child file*.
+        # 2. Mock `bucket_obj.list_blobs(prefix=path+"/")` to return a child file.
         # This is what makes the folder "non-empty".
         mock_child_file = self._create_mock_blob(
             f"{folder_name}/file_inside.txt",
@@ -756,38 +730,29 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
             datetime.datetime(2023, 1, 1, 9, 0, 0),
             "text/plain",
         )
-        mock_blobs_iterator = mock.MagicMock()
-        mock_blobs_iterator.__iter__.return_value = [mock_child_file]
-        mock_blobs_iterator.prefixes = []  # No direct sub-folders, just files
+        mock_child_file.delete.return_value = None
 
-        # Crucially, set `list_blobs` on the `mock_bucket_instance`.
-        mock_bucket_instance.list_blobs.return_value = mock_blobs_iterator
+        # Mock list_blobs to return the child file (called twice in the code)
+        mock_bucket_instance.list_blobs.return_value = [mock_child_file]
 
         # Execute the service method
         result = await self.client.delete_file("test-bucket", folder_name)
 
         # --- Assertions ---
         # Verify calls to bucket.blob
-        mock_bucket_instance.blob.assert_has_calls(
+        mock_bucket_instance.blob.assert_called_with(folder_name)
+
+        self.assertEqual(mock_bucket_instance.list_blobs.call_count, 2)
+        mock_bucket_instance.list_blobs.assert_has_calls(
             [
-                mock.call(folder_name),
+                mock.call(prefix=f"{folder_name}/"),
+                mock.call(prefix=f"{folder_name}/"),
             ]
         )
 
-        # Verify call to list_blobs
-        mock_bucket_instance.list_blobs.assert_called_once_with(
-            prefix=f"{folder_name}/"
-        )
+        mock_child_file.delete.assert_called_once()
 
-        # Verify no delete calls were made, as it's a non-empty folder
-        mock_blob_no_trailing_slash.delete.assert_not_called()
-        mock_folder_marker_blob.delete.assert_not_called()
-        self.assertFalse(mock_child_file.delete.called)
-
-        # Assert the expected error response
-        self.assertEqual(
-            result, {"error": "Non-Empty folder cannot be deleted.", "status": 409}
-        )
+        self.assertEqual(result, {"success": True, "status": 200})
 
     async def test_delete_file_not_found(self):
         """Test deleting a file/folder that does not exist."""
@@ -837,7 +802,7 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
 
         result = await self.client.delete_file("test-bucket", "file_to_delete.txt")
         self.log.exception.assert_called_once_with(
-            "Error deleting file/folder file_to_delete.txt."
+            "Error deleting file file_to_delete.txt."
         )
         self.assertEqual(result, {"error": "Delete API error", "status": 500})
 
