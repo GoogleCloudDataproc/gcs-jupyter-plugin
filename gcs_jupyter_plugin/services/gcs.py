@@ -147,7 +147,7 @@ class Client(tornado.web.RequestHandler):
                 try:
                     base64_encoded = base64.b64encode(file_content).decode("utf-8")
                     return base64_encoded
-                except Exception as encode_error:
+                except Exception:
                     return []
 
             if file_path.endswith(".ipynb"):
