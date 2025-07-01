@@ -48,6 +48,7 @@ export class GCSDrive implements Contents.IDrive {
   private _isDisposed = false;
   private _fileChanged = new Signal<this, Contents.IChangedArgs>(this);
   private _saveSpinner: Spinner | null = null;
+  selected_panel: String | null = null;
 
   constructor(app: JupyterFrontEnd) {
     // Not actually used, but the Contents.IDrive interface requires one.
@@ -276,6 +277,9 @@ export class GCSDrive implements Contents.IDrive {
   async newUntitled(
     options?: Contents.ICreateOptions
   ): Promise<Contents.IModel> {
+    if(this.selected_panel !== 'Google Cloud Storage') {
+      return Promise.reject(new Error('Please select file browser panel for creating new file.'));
+    }
     if (!options) {
       console.error('No data provided for this operation. :', options);
       return Promise.reject('No data provided for this operation.');
@@ -295,12 +299,7 @@ export class GCSDrive implements Contents.IDrive {
         });
         return Promise.reject();
       } else if (options.type === 'notebook') {
-        await showDialog({
-          title: 'Error Creating Notebook',
-          body: 'Notebooks cannot be created outside of a bucket.',
-          buttons: [Dialog.okButton()]
-        });
-        return Promise.reject();
+        return Promise.reject('Notebooks cannot be created outside of a bucket.');
       } else {
         await showDialog({
           title: 'Error',

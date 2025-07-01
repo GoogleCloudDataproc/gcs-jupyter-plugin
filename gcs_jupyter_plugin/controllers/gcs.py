@@ -133,7 +133,10 @@ class LoadFileController(APIHandler):
 
                 file = await client.get_file(bucket, file_path, file_format)
 
-            if file_format == "json":
+            if file_path.endswith(".json"):
+                self.set_header("Content-Type", "application/json")
+                self.write(json.dumps(file))
+            elif file_format == "json":
                 self.set_header("Content-Type", "application/json")
                 self.finish(json.dumps(file))
             elif file_format == "base64":
@@ -245,7 +248,7 @@ class RenameFileController(APIHandler):
 
 class DownloadFileController(APIHandler):
     @tornado.web.authenticated
-    async def get(self):
+    async def post(self):
         try:
             bucket = self.get_argument("bucket")
             file_path = self.get_argument("path")

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 import { Widget, PanelLayout } from '@lumino/widgets';
-import { Dialog, ToolbarButton, showDialog } from '@jupyterlab/apputils';
+import { Dialog, IThemeManager, ToolbarButton, showDialog } from '@jupyterlab/apputils';
 import { FileBrowser } from '@jupyterlab/filebrowser';
 import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
@@ -25,26 +25,39 @@ import { authApi, login } from '../utils/utils';
 import { Message } from '@lumino/messaging';
 
 import {
+  iconFileFilter,
+  iconFileFilterDark,
   iconGCSNewFolder,
+  iconGCSNewFolderDark,
   iconGCSRefresh,
+  iconGCSRefreshDark,
   iconGCSUpload,
+  iconGCSUploadDark,
   iconSigninGoogle
 } from '../utils/icon';
 
 export class GcsBrowserWidget extends Widget {
+  private readonly _themeManager: IThemeManager;
   private readonly fileInput: HTMLInputElement;
-  private readonly newFolder: ToolbarButton;
-  private readonly gcsUpload: ToolbarButton;
-  private readonly refreshButton: ToolbarButton;
+  newFolder: ToolbarButton;
+  private gcsUpload: ToolbarButton;
+  private refreshButton: ToolbarButton;
+  private toggleFileFilter: ToolbarButton;
   private readonly _progressBarWidget: ProgressBarWidget;
 
   private readonly _browser: FileBrowser;
 
   private readonly _titleWidget: TitleWidget;
 
-  constructor(drive: GCSDrive, browser: FileBrowser) {
+  private static readonly NEW_FOLDER_ID = 'New Folder';
+  private static readonly FILE_UPLOAD_ID = 'File Upload';
+  private static readonly REFRESH_ID = 'Refresh';
+  private static readonly TOGGLE_FILE_FILTER_ID = 'Toggle File Filter';
+
+  constructor(drive: GCSDrive, browser: FileBrowser, themeManager: IThemeManager) {
     super();
     this._browser = browser;
+    this._themeManager = themeManager;
 
     this._browser.showLastModifiedColumn = false;
     this._browser.showFileFilter = true;
@@ -67,12 +80,6 @@ export class GcsBrowserWidget extends Widget {
     this._progressBarWidget = new ProgressBarWidget();
     (this.layout as PanelLayout).addWidget(this._progressBarWidget);
 
-    // Adding the progress bar container at the last
-    //this.node.appendChild(this._progressBarContainer);
-
-    // this div not found at the time of constructor call and Post constructor too (onAfterAttach).
-    //const targetElement = this.node.querySelector('.gcs-explorer-refresh-container');
-
     // Listen for changes in the FileBrowser's path
     this._browser.model.pathChanged.connect(this.onPathChanged, this);
 
@@ -92,13 +99,6 @@ export class GcsBrowserWidget extends Widget {
     this._browser.node.style.flexShrink = '1';
     this._browser.node.style.flexGrow = '1';
 
-    this.newFolder = new ToolbarButton({
-      icon: iconGCSNewFolder,
-      className: 'icon-white',
-      onClick: this.handleFolderCreation,
-      tooltip: 'New Folder'
-    });
-
     // Create a file input element
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
@@ -110,29 +110,23 @@ export class GcsBrowserWidget extends Widget {
 
     // Append the file input element to the widget's node
     this.node.appendChild(this.fileInput);
-    this.gcsUpload = new ToolbarButton({
-      icon: iconGCSUpload,
-      className: 'icon-white jp-UploadIcon',
-      onClick: this.onUploadButtonClick,
-      tooltip: 'File Upload'
-    });
-
-    this.refreshButton = new ToolbarButton({
-      icon: iconGCSRefresh,
-      className: 'icon-white',
-      onClick: () => {
-        void this.onRefreshButtonClick();
-      },
-      tooltip: 'Refresh'
-    });
+    
+    this.newFolder = this.createNewFolderButton(true);
+    this.gcsUpload = this.createUploadButton(true);
+    this.refreshButton = this.createRefreshButton(true);
+    this.toggleFileFilter = this.createToggleFileFilterButton(true);
 
     // Since the default location is root. disabling upload and new folder buttons
     this.newFolder.enabled = false;
     this.gcsUpload.enabled = false;
 
-    this._browser.toolbar.addItem('New Folder', this.newFolder);
-    this._browser.toolbar.addItem('File Upload', this.gcsUpload);
-    this._browser.toolbar.addItem('Refresh', this.refreshButton);
+    this._browser.toolbar.addItem(GcsBrowserWidget.NEW_FOLDER_ID, this.newFolder);
+    this._browser.toolbar.addItem(GcsBrowserWidget.FILE_UPLOAD_ID, this.gcsUpload);
+    this._browser.toolbar.addItem(GcsBrowserWidget.REFRESH_ID, this.refreshButton);
+    this._browser.toolbar.addItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID, this.toggleFileFilter);
+
+    this._themeManager.themeChanged.connect(this.onThemeChanged, this);
+    this.onThemeChanged();
   }
 
   protected onAfterAttach(msg: Message): void {
@@ -140,6 +134,122 @@ export class GcsBrowserWidget extends Widget {
     // Call initialize asynchronously after widget is attached
     void this.initialize();
   }
+
+  private createNewFolderButton(isLight: boolean): ToolbarButton {
+    return new ToolbarButton({
+      icon: isLight ? iconGCSNewFolder : iconGCSNewFolderDark,
+      className: 'icon-white',
+      onClick: this.handleFolderCreation,
+      tooltip: 'New Folder'
+    });
+  }
+
+  private createUploadButton(isLight: boolean): ToolbarButton {
+    return new ToolbarButton({
+      icon: isLight ? iconGCSUpload : iconGCSUploadDark,
+      className: 'icon-white jp-UploadIcon',
+      onClick: this.onUploadButtonClick,
+      tooltip: 'File Upload'
+    });
+  }
+
+  private createRefreshButton(isLight: boolean): ToolbarButton {
+    return new ToolbarButton({
+      icon: isLight ? iconGCSRefresh : iconGCSRefreshDark,
+      className: 'icon-white',
+      onClick: () => {
+        void this.onRefreshButtonClick();
+      },
+      tooltip: 'Refresh'
+    });
+  }
+
+  private createToggleFileFilterButton(isLight: boolean): ToolbarButton {
+    return new ToolbarButton({
+      icon: isLight ? iconFileFilter : iconFileFilterDark,
+      className: 'icon-white',
+      onClick: () => {
+        this._browser.showFileFilter = !this._browser.showFileFilter;
+      },
+      tooltip: 'Toggle File Filter'
+    });
+  }
+
+  private readonly onThemeChanged = () => {
+    const isLight = this._themeManager.theme ? this._themeManager.isLight(this._themeManager.theme) : true;
+
+    const newFolderEnabled = this.newFolder.enabled;
+    const gcsUploadEnabled = this.gcsUpload.enabled;
+    const refreshButtonEnabled = this.refreshButton.enabled;
+    const toggleFileFilterEnabled = this.toggleFileFilter.enabled;
+
+    const browserToolbar: any = this._browser.toolbar;
+
+    if (this.newFolder && !this.newFolder.isDisposed) {
+      if (typeof browserToolbar.removeItem === 'function') {
+        browserToolbar.removeItem(GcsBrowserWidget.NEW_FOLDER_ID);
+      } else if (typeof browserToolbar.removeWidget === 'function') {
+        browserToolbar.removeWidget(this.newFolder);
+      } else {
+        console.warn("Toolbar removeItem/removeWidget not found for New Folder. Old button may persist.");
+      }
+      this.newFolder.dispose();
+    }
+    if (this.gcsUpload && !this.gcsUpload.isDisposed) {
+      if (typeof browserToolbar.removeItem === 'function') {
+        browserToolbar.removeItem(GcsBrowserWidget.FILE_UPLOAD_ID);
+      } else if (typeof browserToolbar.removeWidget === 'function') {
+        browserToolbar.removeWidget(this.gcsUpload);
+      } else {
+        console.warn("Toolbar removeItem/removeWidget not found for File Upload. Old button may persist.");
+      }
+      this.gcsUpload.dispose();
+    }
+    if (this.refreshButton && !this.refreshButton.isDisposed) {
+      if (typeof browserToolbar.removeItem === 'function') {
+        browserToolbar.removeItem(GcsBrowserWidget.REFRESH_ID);
+      } else if (typeof browserToolbar.removeWidget === 'function') {
+        browserToolbar.removeWidget(this.refreshButton);
+      } else {
+        console.warn("Toolbar removeItem/removeWidget not found for Refresh. Old button may persist.");
+      }
+      this.refreshButton.dispose();
+    }
+    if (this.toggleFileFilter && !this.toggleFileFilter.isDisposed) {
+      if (typeof browserToolbar.removeItem === 'function') {
+        browserToolbar.removeItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID);
+      } else if (typeof browserToolbar.removeWidget === 'function') {
+        browserToolbar.removeWidget(this.toggleFileFilter);
+      } else {
+        console.warn("Toolbar removeItem/removeWidget not found for Toggle File Filter. Old button may persist.");
+      }
+      this.toggleFileFilter.dispose();
+    }
+
+    // Re-create buttons with new icons
+    this.newFolder = this.createNewFolderButton(isLight);
+    this.gcsUpload = this.createUploadButton(isLight);
+    this.refreshButton = this.createRefreshButton(isLight);
+    this.toggleFileFilter = this.createToggleFileFilterButton(isLight);
+
+    // Restore the enabled state
+    this.newFolder.enabled = newFolderEnabled;
+    this.gcsUpload.enabled = gcsUploadEnabled;
+    this.refreshButton.enabled = refreshButtonEnabled;
+    this.toggleFileFilter.enabled = toggleFileFilterEnabled;
+
+    // Add the new buttons back to the toolbar using their original IDs
+    if (typeof browserToolbar.addItem === 'function') {
+      browserToolbar.addItem(GcsBrowserWidget.NEW_FOLDER_ID, this.newFolder);
+      browserToolbar.addItem(GcsBrowserWidget.FILE_UPLOAD_ID, this.gcsUpload);
+      browserToolbar.addItem(GcsBrowserWidget.REFRESH_ID, this.refreshButton);
+      browserToolbar.addItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID, this.toggleFileFilter);
+    } else {
+        console.error("Toolbar addItem method not found at runtime. Cannot re-add buttons.");
+    }
+
+    console.log('Theme changed:', isLight ? 'Light' : 'Dark');
+  };
 
   // Function to trigger file input dialog when the upload button is clicked
   private readonly onUploadButtonClick = () => {
@@ -230,8 +340,11 @@ export class GcsBrowserWidget extends Widget {
         };
         this.hideProgressBar(); // Hide spinner after file upload is initiated
 
-        // Read the file as text
-        reader.readAsText(file);
+        if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+          reader.readAsDataURL(file); // Read as Data URL for binary files
+        } else {
+          reader.readAsText(file); // Read as text for text-based files
+        }
       });
     }
   };
@@ -335,6 +448,7 @@ export class GcsBrowserWidget extends Widget {
     this._browser.model.pathChanged.disconnect(this.onPathChanged, this);
     this._browser.dispose();
     this.fileInput.removeEventListener('change', this.handleFileUpload);
+    this._themeManager.themeChanged.disconnect(this.onThemeChanged, this);
     this.hideProgressBar();
     super.dispose();
   }
