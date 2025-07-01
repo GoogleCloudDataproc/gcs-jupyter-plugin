@@ -14,11 +14,10 @@
 
 import asyncio
 import json
-import os
-import io
 import base64
 from datetime import timedelta
 import nbformat
+import re
 
 import tornado.web
 
@@ -223,8 +222,16 @@ class Client(tornado.web.RequestHandler):
         """
         try:
             # Ensure content is in string format if it's not already
-            if isinstance(content, dict):
-                content = json.dumps(content)
+            processed_content = content
+            if isinstance(content, bytes):
+                processed_content = content
+            elif isinstance(content, dict):
+                processed_content = json.dumps(content)
+            elif isinstance(content, str) and content.startswith('data:'):
+                data_url_match = re.match(r'data:([^;]+);base64,(.*)', content)
+                if data_url_match:
+                    base64_data = data_url_match.group(2)
+                    processed_content = base64.b64decode(base64_data)
 
             token = self._access_token
             project = self.project_id
@@ -246,7 +253,7 @@ class Client(tornado.web.RequestHandler):
                 }
 
             blob.upload_from_string(
-                content,
+                processed_content,
                 content_type="media",
             )
 

@@ -61,7 +61,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       refreshInterval: 300000 // 5 mins
     });
 
-    const gcsBrowserWidget = new GcsBrowserWidget(gcsDrive, gcsBrowser);
+    const gcsBrowserWidget = new GcsBrowserWidget(gcsDrive, gcsBrowser, themeManager);
     gcsDrive.setBrowserWidget(gcsBrowserWidget);
     documentManager.services.contents.addDrive(gcsDrive);
 
@@ -90,8 +90,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (shellAny?._leftHandler?._sideBar?.currentChanged) {
           shellAny._leftHandler._sideBar.currentChanged.connect(
             (sender: any, args: any) => {
-              defaultBrowser.showFileFilter = true;
-              defaultBrowser.showFileFilter = false;
+              if (args.currentTitle._caption === 'Google Cloud Storage') {
+                gcsDrive.selected_panel = args.currentTitle._caption;
+                gcsBrowserWidget.browser.showFileFilter = true;
+                gcsBrowserWidget.browser.showFileFilter = false;
+              }else {
+                gcsDrive.selected_panel = args.currentTitle._caption;
+                defaultBrowser.showFileFilter = true;
+                defaultBrowser.showFileFilter = false;
+              }
             }
           );
         }
