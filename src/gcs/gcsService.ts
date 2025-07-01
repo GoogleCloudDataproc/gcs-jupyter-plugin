@@ -87,9 +87,15 @@ export class GcsService {
     path: string;
     format: 'text' | 'json' | 'base64';
   }): Promise<string> {
-    const data = (await requestAPI(
-      `api/storage/loadFile?bucket=${bucket}&path=${path}&format=${format}`
-    )) as any;
+
+    const data = await requestAPI('api/storage/loadFile', {
+      method: 'POST',
+      body: JSON.stringify({
+        bucket,
+        path,
+        format
+      })
+    }) as any;
 
     return data;
   }
@@ -159,13 +165,9 @@ export class GcsService {
   static async deleteFile({ bucket, path }: { bucket: string; path: string }) {
     try {
       const response: { status?: number; error?: string } = await requestAPI(
-        'api/storage/deleteFile',
+        'api/storage/deleteFile?bucket=' + encodeURIComponent(bucket) + '&path=' + encodeURIComponent(path),
         {
-          method: 'POST',
-          body: JSON.stringify({
-            bucket,
-            path
-          })
+          method: 'DELETE'
         }
       );
 
@@ -198,7 +200,7 @@ export class GcsService {
       const response: { status?: number; error?: string } = await requestAPI(
         'api/storage/renameFile',
         {
-          method: 'POST',
+          method: 'PATCH',
           body: JSON.stringify({
             oldBucket,
             oldPath,
@@ -235,9 +237,16 @@ export class GcsService {
     name: string;
     format: 'text' | 'json' | 'base64';
   }): Promise<string> {
-    const response = (await requestAPI(
-      `api/storage/downloadFile?bucket=${bucket}&path=${path}&name=${name}&format=${format}`
-    )) as any;
+
+    const response = await requestAPI('api/storage/loadFile', {
+      method: 'POST',
+      body: JSON.stringify({
+        bucket,
+        path,
+        name,
+        format
+      })
+    }) as any;
 
     return response;
   }

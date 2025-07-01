@@ -48,7 +48,7 @@ class CredentialsHandler(APIHandler):
     # patch, put, delete, options) to ensure only authorized user can request the
     # Jupyter server
     @tornado.web.authenticated
-    async def get(self):
+    async def post(self):
         cached = await credentials.get_cached()
         cached.pop("access_token") # Remove sensitive information
         if cached["config_error"] == 1:

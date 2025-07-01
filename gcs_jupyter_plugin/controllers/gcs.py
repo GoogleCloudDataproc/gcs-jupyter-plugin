@@ -121,11 +121,13 @@ class SaveFileController(APIHandler):
 
 class LoadFileController(APIHandler):
     @tornado.web.authenticated
-    async def get(self):
+    async def post(self):
         try:
-            bucket = self.get_argument("bucket")
-            file_path = self.get_argument("path")
-            file_format = self.get_argument("format")
+            data = json.loads(self.request.body)
+            bucket = data.get("bucket")
+            file_path = data.get("path")
+            file_format = data.get("format")
+            
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
@@ -153,11 +155,10 @@ class LoadFileController(APIHandler):
 
 class DeleteFileController(APIHandler):
     @tornado.web.authenticated
-    async def post(self):
+    async def delete(self):
         try:
-            data = json.loads(self.request.body)
-            bucket = data.get("bucket")
-            path = data.get("path")
+            bucket = self.get_argument("bucket")
+            path = self.get_argument("path")
 
             if not bucket:
                 self.finish(
@@ -200,7 +201,7 @@ class DeleteFileController(APIHandler):
 
 class RenameFileController(APIHandler):
     @tornado.web.authenticated
-    async def post(self):
+    async def patch(self):
         try:
             data = json.loads(self.request.body)
             old_bucket = data.get("oldBucket")
@@ -250,10 +251,12 @@ class DownloadFileController(APIHandler):
     @tornado.web.authenticated
     async def post(self):
         try:
-            bucket = self.get_argument("bucket")
-            file_path = self.get_argument("path")
-            name = self.get_argument("name")
-            file_format = self.get_argument("format")
+            data = json.loads(self.request.body)
+            bucket = data.get("bucket")
+            file_path = data.get("path")
+            name = data.get("name")
+            file_format = data.get("format")
+            
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
