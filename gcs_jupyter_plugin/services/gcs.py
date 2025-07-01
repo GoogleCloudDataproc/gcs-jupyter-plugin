@@ -321,6 +321,7 @@ class Client(tornado.web.RequestHandler):
                 # Delete a single file
                 try:
                     target_blob.delete()
+                    self.log.info(f"Successfully deleted file: {path}")
                     return {"success": True, "status": 200}
                 except Exception as e:
                     self.log.exception(f"Error deleting file {path}.")
@@ -328,6 +329,7 @@ class Client(tornado.web.RequestHandler):
             else:
                 # Delete a folder (recursively delete all blobs with the prefix)
                 folder_prefix = path if path.endswith("/") else path + "/"
+                self.log.info(f"Attempting to delete non-empty folder: {folder_prefix}")
                 try:
                     blobs_to_delete = list(bucket_obj.list_blobs(prefix=folder_prefix))
                     if not blobs_to_delete:
@@ -337,6 +339,9 @@ class Client(tornado.web.RequestHandler):
                         empty_folder_blob = bucket_obj.blob(folder_prefix)
                         if empty_folder_blob.exists() and empty_folder_blob.size == 0:
                             empty_folder_blob.delete()
+                            self.log.info(
+                                f"Successfully deleted empty folder marker: {folder_prefix}"
+                            )
                             return {"success": True, "status": 200}
                         else:
                             return {
@@ -345,8 +350,12 @@ class Client(tornado.web.RequestHandler):
                             }
 
                     for blob_to_delete in blobs_to_delete:
+                        self.log.info(f"Deleting blob: {blob_to_delete.name}")
                         blob_to_delete.delete()
 
+                    self.log.info(
+                        f"Successfully deleted non-empty folder and its contents: {path}"
+                    )
                     return {"success": True, "status": 200}
 
                 except Exception as e:
@@ -402,6 +411,7 @@ class Client(tornado.web.RequestHandler):
                     # Only 0 byte Object present
                     is_file = False
                 elif blob_count > 0:
+                    self.log.info("Renaming a non-empty folder.")
                     return await self.rename_non_empty_folder(
                         bucket, blob_name, new_name
                     )
@@ -460,6 +470,9 @@ class Client(tornado.web.RequestHandler):
         if not blobs_to_rename:
             empty_folder_blob = bucket.blob(source_prefix_normalized)
             if empty_folder_blob.exists() and empty_folder_blob.size == 0:
+                self.log.info(
+                    f"Renaming empty folder marker '{source_prefix_normalized}' to '{new_prefix_normalized}'."
+                )
                 new_blob = bucket.rename_blob(empty_folder_blob, new_prefix_normalized)
                 return {
                     "name": new_blob.name,
