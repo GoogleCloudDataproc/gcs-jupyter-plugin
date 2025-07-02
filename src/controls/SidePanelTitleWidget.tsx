@@ -40,7 +40,7 @@ export const TitleComponent = function ({
         ...styles
       }}
     >
-      <div className="dataset-explorer-refresh-container">
+      <div className="gcs-explorer-refresh-container">
         <div>
           <span>{titleStr}</span>
           {isPreview ? (
@@ -63,7 +63,10 @@ export const TitleComponent = function ({
 };
 
 export class TitleWidget extends ReactWidget {
-  constructor(private titleStr: string, private isPreview: boolean) {
+  constructor(
+    private titleStr: string,
+    private isPreview: boolean
+  ) {
     super();
     this.node.style.flexShrink = '0';
   }

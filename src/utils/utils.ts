@@ -18,10 +18,10 @@
 import { requestAPI } from '../handler';
 import { ToastOptions, toast } from 'react-toastify';
 
-import { DataprocLoggingService } from './loggingService';
+import { CloudStorageLoggingService } from './loggingService';
 import { STATUS_SUCCESS } from './const';
 
-export const toastifyCustomStyle: ToastOptions<{}> = {
+export const toastifyCustomStyle: ToastOptions<Record<string, never>> = {
   hideProgressBar: true,
   autoClose: 60000,
   theme: 'dark',
@@ -38,7 +38,9 @@ export interface IAuthCredentials {
 
 export const authApi = async (): Promise<IAuthCredentials | undefined> => {
   try {
-    const data = await requestAPI('credentials');
+    const data = await requestAPI('credentials' , {
+      method: 'POST'
+    });
     if (typeof data === 'object' && data !== null) {
       const credentials: IAuthCredentials = {
         access_token: (data as { access_token: string }).access_token,
@@ -91,6 +93,6 @@ export async function loggedFetch(
 ): Promise<Response> {
   const resp = await fetch(input, init);
   // Intentionally not waiting for log response.
-  DataprocLoggingService.logFetch(input, init, resp);
+  CloudStorageLoggingService.logFetch(input, init, resp);
   return resp;
 }

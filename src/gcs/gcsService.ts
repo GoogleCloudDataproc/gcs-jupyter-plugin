@@ -16,7 +16,6 @@
  */
 
 import { requestAPI } from '../handler';
-import { authApi } from '../utils/utils';
 import { showDialog, Dialog } from '@jupyterlab/apputils';
 
 export class GcsService {
@@ -38,7 +37,7 @@ export class GcsService {
       localPath
     )?.groups;
     if (!matches) {
-      throw 'Invalid Path';
+      throw new Error('Invalid Path');
     }
     const path = matches['path'];
     return {
@@ -52,30 +51,26 @@ export class GcsService {
    * Thin wrapper around storage.bucket.list
    * @see https://cloud.google.com/storage/docs/listing-buckets#rest-list-buckets
    */
-  static async listBuckets({ prefix }: { prefix: string }) {
-    const credentials = await authApi();
-    if (!credentials) {
-      throw 'not logged in';
-    }
-    const data = (await requestAPI(
-      `api/storage/listBuckets?prefix=${prefix}`
-    )) as any;
+  static async listBuckets() {
+    const data = (await requestAPI('api/storage/listBuckets')) as any;
     return data;
   }
-
 
   /**
    * Thin wrapper around storage.object.list
    * @see https://cloud.google.com/storage/docs/listing-objects
    */
-  static async listFiles({ prefix, bucket }: { prefix: string; bucket: string }) {
-    const credentials = await authApi();
-    if (!credentials) {
-      throw 'not logged in';
-    }
-    const data = (await requestAPI(
-      `api/storage/listFiles?prefix=${prefix}&bucket=${bucket}`
-    )) as any;
+  static async listFiles({
+    prefix,
+    bucket
+  }: {
+    prefix: string;
+    bucket: string;
+  }) {
+    const url = `api/storage/listFiles?prefix=${encodeURIComponent(prefix)}&bucket=${encodeURIComponent(bucket)}`;
+
+    const data = (await requestAPI(url)) as any;
+
     return data;
   }
 
@@ -83,18 +78,24 @@ export class GcsService {
    * Thin wrapper around storage.object.download-into-memory
    * @see https://cloud.google.com/storage/docs/downloading-objects-into-memory
    */
-  static async loadFile({bucket, path, format }: {
-    bucket: string; path: string; format: 'text' | 'json' | 'base64';
-    }
-  ): Promise<string> {
+  static async loadFile({
+    bucket,
+    path,
+    format
+  }: {
+    bucket: string;
+    path: string;
+    format: 'text' | 'json' | 'base64';
+  }): Promise<string> {
 
-    const credentials = await authApi();
-    if (!credentials) {
-      throw 'not logged in';
-    }
-    const data = (await requestAPI(
-      `api/storage/loadFile?bucket=${bucket}&path=${path}&format=${format}`
-    )) as any;
+    const data = await requestAPI('api/storage/loadFile', {
+      method: 'POST',
+      body: JSON.stringify({
+        bucket,
+        path,
+        format
+      })
+    }) as any;
 
     return data;
   }
@@ -107,23 +108,19 @@ export class GcsService {
     bucket,
     path,
     folderName
-    }: {
-      bucket: string;
-      path: string;
-      folderName: string;
-    }) {
-      const credentials = await authApi();
-      if (!credentials) {
-        throw 'not logged in';
-      }
-      const data = await requestAPI('api/storage/createFolder', {
-        method: 'POST',
-        body: JSON.stringify({
-          bucket,
-          path,
-          folderName
-        })
-      });
+  }: {
+    bucket: string;
+    path: string;
+    folderName: string;
+  }) {
+    const data = await requestAPI('api/storage/createFolder', {
+      method: 'POST',
+      body: JSON.stringify({
+        bucket,
+        path,
+        folderName
+      })
+    });
     return data;
   }
 
@@ -140,13 +137,8 @@ export class GcsService {
     bucket: string;
     path: string;
     contents: Blob | string;
-    upload?: boolean 
+    upload?: boolean;
   }) {
-    const credentials = await authApi();
-    if (!credentials) {
-      throw 'not logged in';
-    }
-
     try {
       // Create form data to send the file
       const formData = new FormData();
@@ -154,15 +146,15 @@ export class GcsService {
       formData.append('path', path);
       formData.append('contents', contents);
       formData.append('upload', String(upload));
-      
+
       const response = await requestAPI('api/storage/saveFile', {
         method: 'POST',
-        body: formData,
+        body: formData
       });
-      
+
       return response;
     } catch (error: any) {
-      console.error(error?.message || 'Error saving file');
+      console.error(error?.message ?? 'Error saving file');
     }
   }
 
@@ -171,25 +163,20 @@ export class GcsService {
    * @see https://cloud.google.com/storage/docs/deleting-objects
    */
   static async deleteFile({ bucket, path }: { bucket: string; path: string }) {
-    const credentials = await authApi();
-    if (!credentials) {
-      throw 'not logged in';
-    }
     try {
-      const response: { status?: number, error?: string } = await requestAPI('api/storage/deleteFile', {
-        method: 'POST',
-        body: JSON.stringify({
-          bucket,
-          path
-        })
-      });
-      
+      const response: { status?: number; error?: string } = await requestAPI(
+        'api/storage/deleteFile?bucket=' + encodeURIComponent(bucket) + '&path=' + encodeURIComponent(path),
+        {
+          method: 'DELETE'
+        }
+      );
+
       return response;
     } catch (error: unknown) {
       if (typeof error === 'string') {
-        throw error; 
+        throw error;
       } else {
-        throw 'Error deleting file';
+        throw new Error('Error deleting file');
       }
     }
   }
@@ -209,20 +196,19 @@ export class GcsService {
     newBucket: string;
     newPath: string;
   }) {
-    const credentials = await authApi();
-    if (!credentials) {
-      throw 'not logged in';
-    }
     try {
-      const response: { status?: number, error?: string } = await requestAPI('api/storage/renameFile', {
-        method: 'POST',
-        body: JSON.stringify({
-          oldBucket,
-          oldPath,
-          newBucket,
-          newPath
-        })
-      });
+      const response: { status?: number; error?: string } = await requestAPI(
+        'api/storage/renameFile',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            oldBucket,
+            oldPath,
+            newBucket,
+            newPath
+          })
+        }
+      );
 
       return response;
     } catch (error: any) {
@@ -232,7 +218,7 @@ export class GcsService {
         buttons: [Dialog.okButton()]
       });
       console.error('Error during rename operation:', error);
-      throw error?.message || 'Error renaming file';
+      throw error?.message ?? 'Error renaming file';
     }
   }
 
@@ -252,16 +238,16 @@ export class GcsService {
     format: 'text' | 'json' | 'base64';
   }): Promise<string> {
 
-    const credentials = await authApi();
-    if (!credentials) {
-      throw 'not logged in';
-    }
+    const response = await requestAPI('api/storage/loadFile', {
+      method: 'POST',
+      body: JSON.stringify({
+        bucket,
+        path,
+        name,
+        format
+      })
+    }) as any;
 
-    const response = (await requestAPI(
-      `api/storage/downloadFile?bucket=${bucket}&path=${path}&name=${name}&format=${format}`
-    )) as any;
-    
     return response;
-
   }
 }

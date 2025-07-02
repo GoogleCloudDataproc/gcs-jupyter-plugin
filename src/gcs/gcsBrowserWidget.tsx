@@ -15,54 +15,245 @@
  * limitations under the License.
  */
 import { Widget, PanelLayout } from '@lumino/widgets';
-import { Dialog, ToolbarButton, showDialog } from '@jupyterlab/apputils';
-import { FileBrowser, IFileBrowserFactory } from '@jupyterlab/filebrowser';
-import 'react-toastify/dist/ReactToastify.css';
-import { LabIcon } from '@jupyterlab/ui-components';
-import gcsNewFolderIcon from '../../style/icons/gcs_folder_new_icon.svg';
-import gcsUploadIcon from '../../style/icons/gcs_upload_icon.svg';
+import { Dialog, IThemeManager, ToolbarButton, showDialog } from '@jupyterlab/apputils';
+import { FileBrowser } from '@jupyterlab/filebrowser';
 import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
 import { TitleWidget } from '../controls/SidePanelTitleWidget';
-import { authApi, login, toastifyCustomStyle } from '../utils/utils';
-import { toast } from 'react-toastify';
-import signinGoogleIcon from '../../style/icons/signin_google_icon.svg';
+import { ProgressBarWidget } from './ProgressBarWidget';
+import { authApi, login } from '../utils/utils';
+import { Message } from '@lumino/messaging';
 
-const iconGCSNewFolder = new LabIcon({
-  name: 'gcs-toolbar:gcs-folder-new-icon',
-  svgstr: gcsNewFolderIcon
-});
-const iconGCSUpload = new LabIcon({
-  name: 'gcs-toolbar:gcs-upload-icon',
-  svgstr: gcsUploadIcon
-});
-
-const IconsigninGoogle = new LabIcon({
-  name: 'launcher:signin_google_icon',
-  svgstr: signinGoogleIcon
-});
-
-const debounce = (func: any, delay: number) => {
-  let timeoutId: any;
-  return function (...args: any) {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-      func(...args);
-    }, delay);
-  };
-};
+import {
+  iconFileFilter,
+  iconFileFilterDark,
+  iconGCSNewFolder,
+  iconGCSNewFolderDark,
+  iconGCSRefresh,
+  iconGCSRefreshDark,
+  iconGCSUpload,
+  iconGCSUploadDark,
+  iconSigninGoogle
+} from '../utils/icon';
 
 export class GcsBrowserWidget extends Widget {
-  private browser!: FileBrowser;
-  private fileInput!: HTMLInputElement;
-  private newFolder!: ToolbarButton;
-  private gcsUpload!: ToolbarButton;
-  private fileBrowserFactory: IFileBrowserFactory;
-  private drive: GCSDrive;
+  private readonly _themeManager: IThemeManager;
+  private readonly fileInput: HTMLInputElement;
+  newFolder: ToolbarButton;
+  private gcsUpload: ToolbarButton;
+  private refreshButton: ToolbarButton;
+  private toggleFileFilter: ToolbarButton;
+  private readonly _progressBarWidget: ProgressBarWidget;
+
+  private readonly _browser: FileBrowser;
+
+  private readonly _titleWidget: TitleWidget;
+
+  private static readonly NEW_FOLDER_ID = 'New Folder';
+  private static readonly FILE_UPLOAD_ID = 'File Upload';
+  private static readonly REFRESH_ID = 'Refresh';
+  private static readonly TOGGLE_FILE_FILTER_ID = 'Toggle File Filter';
+
+  constructor(drive: GCSDrive, browser: FileBrowser, themeManager: IThemeManager) {
+    super();
+    this._browser = browser;
+    this._themeManager = themeManager;
+
+    this._browser.showLastModifiedColumn = false;
+    this._browser.showFileFilter = true;
+    this._browser.showHiddenFiles = true;
+
+    // Create an empty panel layout initially
+    this.layout = new PanelLayout();
+    this.node.style.height = '100%';
+    this.node.style.display = 'flex';
+    this.node.style.flexDirection = 'column';
+
+    this._browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
+    this._browser.node.style.flexShrink = '1';
+    this._browser.node.style.flexGrow = '1';
+
+    // Title widget for the GCS Browser
+    this._titleWidget = new TitleWidget('Google Cloud Storage', false);
+    (this.layout as PanelLayout).addWidget(this._titleWidget);
+
+    this._progressBarWidget = new ProgressBarWidget();
+    (this.layout as PanelLayout).addWidget(this._progressBarWidget);
+
+    // Listen for changes in the FileBrowser's path
+    this._browser.model.pathChanged.connect(this.onPathChanged, this);
+
+    const originalCd = this._browser.model.cd;
+    this._browser.model.cd = async (path: string) => {
+      this.showProgressBar();
+      try {
+        const result = await originalCd.call(this._browser.model, path);
+        return result;
+      } finally {
+        this.hideProgressBar();
+      }
+    };
+
+    this._browser.showFileCheckboxes = false;
+    (this.layout as PanelLayout).addWidget(this._browser);
+    this._browser.node.style.flexShrink = '1';
+    this._browser.node.style.flexGrow = '1';
+
+    // Create a file input element
+    this.fileInput = document.createElement('input');
+    this.fileInput.type = 'file';
+    this.fileInput.multiple = true; // Enable multiple file selection
+    this.fileInput.style.display = 'none';
+
+    // Attach event listener for file selection
+    this.fileInput.addEventListener('change', this.handleFileUpload);
+
+    // Append the file input element to the widget's node
+    this.node.appendChild(this.fileInput);
+    
+    this.newFolder = this.createNewFolderButton(true);
+    this.gcsUpload = this.createUploadButton(true);
+    this.refreshButton = this.createRefreshButton(true);
+    this.toggleFileFilter = this.createToggleFileFilterButton(true);
+
+    // Since the default location is root. disabling upload and new folder buttons
+    this.newFolder.enabled = false;
+    this.gcsUpload.enabled = false;
+
+    this._browser.toolbar.addItem(GcsBrowserWidget.NEW_FOLDER_ID, this.newFolder);
+    this._browser.toolbar.addItem(GcsBrowserWidget.FILE_UPLOAD_ID, this.gcsUpload);
+    this._browser.toolbar.addItem(GcsBrowserWidget.REFRESH_ID, this.refreshButton);
+    this._browser.toolbar.addItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID, this.toggleFileFilter);
+
+    this._themeManager.themeChanged.connect(this.onThemeChanged, this);
+    this.onThemeChanged();
+  }
+
+  protected onAfterAttach(msg: Message): void {
+    super.onAfterAttach(msg);
+    // Call initialize asynchronously after widget is attached
+    void this.initialize();
+  }
+
+  private createNewFolderButton(isLight: boolean): ToolbarButton {
+    return new ToolbarButton({
+      icon: isLight ? iconGCSNewFolder : iconGCSNewFolderDark,
+      className: 'icon-white',
+      onClick: this.handleFolderCreation,
+      tooltip: 'New Folder'
+    });
+  }
+
+  private createUploadButton(isLight: boolean): ToolbarButton {
+    return new ToolbarButton({
+      icon: isLight ? iconGCSUpload : iconGCSUploadDark,
+      className: 'icon-white jp-UploadIcon',
+      onClick: this.onUploadButtonClick,
+      tooltip: 'File Upload'
+    });
+  }
+
+  private createRefreshButton(isLight: boolean): ToolbarButton {
+    return new ToolbarButton({
+      icon: isLight ? iconGCSRefresh : iconGCSRefreshDark,
+      className: 'icon-white',
+      onClick: () => {
+        void this.onRefreshButtonClick();
+      },
+      tooltip: 'Refresh'
+    });
+  }
+
+  private createToggleFileFilterButton(isLight: boolean): ToolbarButton {
+    return new ToolbarButton({
+      icon: isLight ? iconFileFilter : iconFileFilterDark,
+      className: 'icon-white',
+      onClick: () => {
+        this._browser.showFileFilter = !this._browser.showFileFilter;
+      },
+      tooltip: 'Toggle File Filter'
+    });
+  }
+
+  private readonly onThemeChanged = () => {
+    const isLight = this._themeManager.theme ? this._themeManager.isLight(this._themeManager.theme) : true;
+
+    const newFolderEnabled = this.newFolder.enabled;
+    const gcsUploadEnabled = this.gcsUpload.enabled;
+    const refreshButtonEnabled = this.refreshButton.enabled;
+    const toggleFileFilterEnabled = this.toggleFileFilter.enabled;
+
+    const browserToolbar: any = this._browser.toolbar;
+
+    if (this.newFolder && !this.newFolder.isDisposed) {
+      if (typeof browserToolbar.removeItem === 'function') {
+        browserToolbar.removeItem(GcsBrowserWidget.NEW_FOLDER_ID);
+      } else if (typeof browserToolbar.removeWidget === 'function') {
+        browserToolbar.removeWidget(this.newFolder);
+      } else {
+        console.warn("Toolbar removeItem/removeWidget not found for New Folder. Old button may persist.");
+      }
+      this.newFolder.dispose();
+    }
+    if (this.gcsUpload && !this.gcsUpload.isDisposed) {
+      if (typeof browserToolbar.removeItem === 'function') {
+        browserToolbar.removeItem(GcsBrowserWidget.FILE_UPLOAD_ID);
+      } else if (typeof browserToolbar.removeWidget === 'function') {
+        browserToolbar.removeWidget(this.gcsUpload);
+      } else {
+        console.warn("Toolbar removeItem/removeWidget not found for File Upload. Old button may persist.");
+      }
+      this.gcsUpload.dispose();
+    }
+    if (this.refreshButton && !this.refreshButton.isDisposed) {
+      if (typeof browserToolbar.removeItem === 'function') {
+        browserToolbar.removeItem(GcsBrowserWidget.REFRESH_ID);
+      } else if (typeof browserToolbar.removeWidget === 'function') {
+        browserToolbar.removeWidget(this.refreshButton);
+      } else {
+        console.warn("Toolbar removeItem/removeWidget not found for Refresh. Old button may persist.");
+      }
+      this.refreshButton.dispose();
+    }
+    if (this.toggleFileFilter && !this.toggleFileFilter.isDisposed) {
+      if (typeof browserToolbar.removeItem === 'function') {
+        browserToolbar.removeItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID);
+      } else if (typeof browserToolbar.removeWidget === 'function') {
+        browserToolbar.removeWidget(this.toggleFileFilter);
+      } else {
+        console.warn("Toolbar removeItem/removeWidget not found for Toggle File Filter. Old button may persist.");
+      }
+      this.toggleFileFilter.dispose();
+    }
+
+    // Re-create buttons with new icons
+    this.newFolder = this.createNewFolderButton(isLight);
+    this.gcsUpload = this.createUploadButton(isLight);
+    this.refreshButton = this.createRefreshButton(isLight);
+    this.toggleFileFilter = this.createToggleFileFilterButton(isLight);
+
+    // Restore the enabled state
+    this.newFolder.enabled = newFolderEnabled;
+    this.gcsUpload.enabled = gcsUploadEnabled;
+    this.refreshButton.enabled = refreshButtonEnabled;
+    this.toggleFileFilter.enabled = toggleFileFilterEnabled;
+
+    // Add the new buttons back to the toolbar using their original IDs
+    if (typeof browserToolbar.addItem === 'function') {
+      browserToolbar.addItem(GcsBrowserWidget.NEW_FOLDER_ID, this.newFolder);
+      browserToolbar.addItem(GcsBrowserWidget.FILE_UPLOAD_ID, this.gcsUpload);
+      browserToolbar.addItem(GcsBrowserWidget.REFRESH_ID, this.refreshButton);
+      browserToolbar.addItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID, this.toggleFileFilter);
+    } else {
+        console.error("Toolbar addItem method not found at runtime. Cannot re-add buttons.");
+    }
+
+    console.log('Theme changed:', isLight ? 'Light' : 'Dark');
+  };
 
   // Function to trigger file input dialog when the upload button is clicked
-  private onUploadButtonClick = () => {
-    if (this.browser.model.path.split(':')[1] !== '') {
+  private readonly onUploadButtonClick = () => {
+    if (this._browser.model.path.split(':')[1] !== '') {
       this.fileInput.click();
     } else {
       showDialog({
@@ -73,9 +264,9 @@ export class GcsBrowserWidget extends Widget {
     }
   };
 
-  private handleFolderCreation = () => {
-    if (this.browser.model.path.split(':')[1] !== '') {
-      this.browser.createNewDirectory();
+  private readonly handleFolderCreation = () => {
+    if (this._browser.model.path.split(':')[1] !== '') {
+      this._browser.createNewDirectory();
     } else {
       showDialog({
         title: 'Create Folder Error',
@@ -86,7 +277,7 @@ export class GcsBrowserWidget extends Widget {
   };
 
   // Function to handle file upload
-  private handleFileUpload = async (event: Event) => {
+  private readonly handleFileUpload = async (event: Event) => {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files || []);
 
@@ -98,9 +289,10 @@ export class GcsBrowserWidget extends Widget {
         const file = fileData;
         const reader = new FileReader();
 
+        this.showProgressBar(); // Show spinner for file upload
         reader.onloadend = async () => {
           // Upload the file content to Google Cloud Storage
-          const gcsPath = this.browser.model.path.split(':')[1];
+          const gcsPath = this._browser.model.path.split(':')[1];
           const path = GcsService.pathParser(gcsPath);
           let filePath;
 
@@ -132,10 +324,6 @@ export class GcsBrowserWidget extends Widget {
                 contents: reader.result as string, // assuming contents is a string
                 upload: false
               });
-              toast.success(
-                `${file.name} overwritten successfully.`,
-                toastifyCustomStyle
-              );
             }
           } else {
             await GcsService.saveFile({
@@ -144,46 +332,31 @@ export class GcsBrowserWidget extends Widget {
               contents: reader.result as string, // assuming contents is a string
               upload: true
             });
-            toast.success(
-              `${file.name} uploaded successfully.`,
-              toastifyCustomStyle
-            );
           }
 
           // Optionally, update the FileBrowser model to reflect the newly uploaded file
           // Example: Refresh the current directory
-          await this.browser.model.refresh();
+          await this._browser.model.refresh();
         };
+        this.hideProgressBar(); // Hide spinner after file upload is initiated
 
-        // Read the file as text
-        reader.readAsText(file);
+        if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+          reader.readAsDataURL(file); // Read as Data URL for binary files
+        } else {
+          reader.readAsText(file); // Read as text for text-based files
+        }
       });
     }
   };
 
-  private filterFilesByName = async (filterValue: string) => {
-    this.browser.model.refresh();
+  private readonly onRefreshButtonClick = async () => {
+    this.showProgressBar(); // Show spinner for explicit refresh
+    try {
+      await this._browser.model.refresh();
+    } finally {
+      this.hideProgressBar(); // Hide after refresh completes
+    }
   };
-
-  constructor(drive: GCSDrive, fileBrowserFactory: IFileBrowserFactory) {
-    super();
-    this.drive = drive;
-    this.fileBrowserFactory = fileBrowserFactory;
-
-    // Create an empty panel layout initially
-    this.layout = new PanelLayout();
-    this.node.style.height = '100%';
-    this.node.style.display = 'flex';
-    this.node.style.flexDirection = 'column';
-
-    // Add title widget initially
-    (this.layout as PanelLayout).addWidget(
-      new TitleWidget('Google Cloud Storage', false)
-    );
-
-    // Check configuration and initialize appropriately
-    this.initialize();
-  }
 
   private async initialize(): Promise<void> {
     try {
@@ -242,110 +415,50 @@ export class GcsBrowserWidget extends Widget {
 
           const googleIconContainer = document.createElement('div');
           googleIconContainer.style.marginTop = '20px';
-          googleIconContainer.innerHTML = IconsigninGoogle.svgstr;
+          googleIconContainer.innerHTML = iconSigninGoogle.svgstr;
           loginButton.appendChild(googleIconContainer);
           loginContainer.appendChild(loginText);
           loginContainer.appendChild(loginButton);
           this.node.appendChild(loginContainer);
           return;
         }
-        this.setupBrowserWidget();
       }
     } catch (error) {
       console.error('Error during initialization:', error);
     }
   }
 
-  private setupBrowserWidget(): void {
-    this.browser = this.fileBrowserFactory.createFileBrowser(
-      'gcs-jupyter-plugin:gcsBrowser',
-      {
-        driveName: this.drive.name
-      }
-    );
+  public async refreshContents() {
+    await this._browser.model.refresh();
+  }
 
-    let filterInput = document.createElement('input');
-    filterInput.id = 'filter-buckets-objects';
-    filterInput.className = 'filter-search-gcs';
-    filterInput.type = 'text';
-    filterInput.placeholder = 'Filter by Name';
-    filterInput.style.display = 'none';
+  public showProgressBar(): void {
+    if (this._progressBarWidget) {
+      this._progressBarWidget.show();
+    }
+  }
 
-    // Debounce the filterFilesByName function with a delay of 300 milliseconds
-    const debouncedFilter = debounce(this.filterFilesByName, 300);
-
-    filterInput.addEventListener('input', event => {
-      const filterValue = (event.target as HTMLInputElement).value;
-      //@ts-ignore
-      document
-        .getElementById('filter-buckets-objects')
-        .setAttribute('value', filterValue);
-      // Call a function to filter files based on filterValue
-      debouncedFilter(filterValue);
-    });
-    // Listen for changes in the FileBrowser's path
-    this.browser.model.pathChanged.connect(this.onPathChanged, this);
-    this.browser.showFileCheckboxes = false;
-    (this.layout as PanelLayout).addWidget(this.browser);
-    this.browser.node.style.flexShrink = '1';
-    this.browser.node.style.flexGrow = '1';
-
-    this.newFolder = new ToolbarButton({
-      icon: iconGCSNewFolder,
-      className: 'icon-white',
-      onClick: this.handleFolderCreation,
-      tooltip: 'New Folder'
-    });
-
-    // Create a file input element
-    this.fileInput = document.createElement('input');
-    this.fileInput.type = 'file';
-    this.fileInput.multiple = true; // Enable multiple file selection
-    this.fileInput.style.display = 'none';
-
-    // Attach event listener for file selection
-    this.fileInput.addEventListener('change', this.handleFileUpload);
-
-    // Append the file input element to the widget's node
-    this.node.appendChild(this.fileInput);
-    this.gcsUpload = new ToolbarButton({
-      icon: iconGCSUpload,
-      className: 'icon-white jp-UploadIcon',
-      onClick: this.onUploadButtonClick,
-      tooltip: 'File Upload'
-    });
-
-    // Since the default location is root. disabling upload and new folder buttons
-    this.newFolder.enabled = false;
-    this.gcsUpload.enabled = false;
-
-    this.browser.toolbar.addItem('New Folder', this.newFolder);
-    this.browser.toolbar.addItem('File Upload', this.gcsUpload);
-    let filterItem = new Widget({ node: filterInput });
-    this.browser.toolbar.addItem('Filter by Name:', filterItem);
+  public hideProgressBar(): void {
+    if (this._progressBarWidget) {
+      this._progressBarWidget.hide();
+    }
   }
 
   dispose() {
-    this.browser.model.pathChanged.disconnect(this.onPathChanged, this);
-    this.browser.dispose();
+    this._browser.model.pathChanged.disconnect(this.onPathChanged, this);
+    this._browser.dispose();
     this.fileInput.removeEventListener('change', this.handleFileUpload);
+    this._themeManager.themeChanged.disconnect(this.onThemeChanged, this);
+    this.hideProgressBar();
     super.dispose();
   }
 
-  private onPathChanged = () => {
-    // Clear the filter input value when the path changes
-    const filterInputElement = document.getElementById(
-      'filter-buckets-objects'
-    ) as HTMLInputElement | null;
-    if (filterInputElement) {
-      filterInputElement.value = '';
-      //@ts-ignore
-      filterInputElement.removeAttribute('value'); // Also remove the attribute for consistency
-      this.filterFilesByName(''); // Optionally refresh the content with an empty filter
-    }
+  private readonly onPathChanged = () => {
+    // The below 2 lines of code is added as a workaround for switching to corresponding filebrowser context
+    this._browser.showFileFilter = false;
+    this._browser.showFileFilter = true;
 
-    // Loading Current Path
-    const currentPath = this.browser.model.path.split(':')[1];
+    const currentPath = this._browser.model.path.split(':')[1];
     // Check if the current path is the root (empty string or just '/')
     const isRootPath = currentPath === '' || currentPath === '/';
 
@@ -359,4 +472,8 @@ export class GcsBrowserWidget extends Widget {
       this.newFolder.enabled = !isRootPath;
     }
   };
+
+  public get browser(): FileBrowser {
+    return this._browser;
+  }
 }

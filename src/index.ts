@@ -5,36 +5,37 @@ import {
 
 import { GCSDrive } from './gcs/gcsDrive';
 import { Panel } from '@lumino/widgets';
-import { DataprocLoggingService, LOG_LEVEL } from './utils/loggingService';
+import { CloudStorageLoggingService, LOG_LEVEL } from './utils/loggingService';
 import { GcsBrowserWidget } from './gcs/gcsBrowserWidget';
 import { IDocumentManager } from '@jupyterlab/docmanager';
-import { IFileBrowserFactory } from '@jupyterlab/filebrowser';
+import {
+  IDefaultFileBrowser,
+  IFileBrowserFactory
+} from '@jupyterlab/filebrowser';
 import { IThemeManager } from '@jupyterlab/apputils';
-import { LabIcon } from '@jupyterlab/ui-components';
-import storageIcon from '../style/icons/storage_icon.svg';
-import storageIconDark from '../style/icons/Storage-icon-dark.svg';
+import { iconStorage, iconStorageDark } from './utils/icon';
+import { NAMESPACE, PLUGIN_ID } from './utils/const';
+
 /**
  * Initialization data for the gcs-jupyter-plugin extension.
  */
 
-const iconStorage = new LabIcon({
-  name: 'launcher:storage-icon',
-  svgstr: storageIcon
-});
-const iconStorageDark = new LabIcon({
-  name: 'launcher:storage-icon-dark',
-  svgstr: storageIconDark
-});
 const plugin: JupyterFrontEndPlugin<void> = {
-  id: 'gcs-jupyter-plugin:plugin',
+  id: PLUGIN_ID,
   description: 'A JupyterLab extension.',
   autoStart: true,
-  optional: [IFileBrowserFactory, IThemeManager, IDocumentManager],
+  requires: [
+    IFileBrowserFactory,
+    IThemeManager,
+    IDocumentManager,
+    IDefaultFileBrowser
+  ],
   activate: (
     app: JupyterFrontEnd,
     factory: IFileBrowserFactory,
     themeManager: IThemeManager,
-    documentManager: IDocumentManager
+    documentManager: IDocumentManager,
+    defaultBrowser: IDefaultFileBrowser
   ) => {
     console.log('JupyterLab extension gcs-jupyter-plugin is activated!');
 
@@ -53,24 +54,58 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     };
 
-    let panelGcs: Panel | undefined;
-    let gcsDrive: GCSDrive | undefined;
-    panelGcs?.dispose();
-    gcsDrive?.dispose();
-    panelGcs = undefined;
-    gcsDrive = undefined;
-    panelGcs = new Panel();
+    const gcsDrive = new GCSDrive(app);
+
+    const gcsBrowser = factory.createFileBrowser(NAMESPACE, {
+      driveName: gcsDrive.name,
+      refreshInterval: 300000 // 5 mins
+    });
+
+    const gcsBrowserWidget = new GcsBrowserWidget(gcsDrive, gcsBrowser, themeManager);
+    gcsDrive.setBrowserWidget(gcsBrowserWidget);
+    documentManager.services.contents.addDrive(gcsDrive);
+
+    const panelGcs = new Panel();
     panelGcs.id = 'GCS-bucket-tab';
     panelGcs.title.caption = 'Google Cloud Storage';
     panelGcs.title.className = 'panel-icons-custom-style';
-    gcsDrive = new GCSDrive();
-    documentManager.services.contents.addDrive(gcsDrive);
-    panelGcs.addWidget(
-      new GcsBrowserWidget(gcsDrive, factory as IFileBrowserFactory)
-    );
+    panelGcs.addWidget(gcsBrowserWidget);
+
+    defaultBrowser.model.restored.then(() => {
+      defaultBrowser.showFileFilter = true;
+      defaultBrowser.showFileFilter = false;
+    });
+
     onThemeChanged();
     app.shell.add(panelGcs, 'left', { rank: 1002 });
-    DataprocLoggingService.log('Cloud storage is enabled', LOG_LEVEL.INFO);
+    CloudStorageLoggingService.log('Cloud storage is enabled', LOG_LEVEL.INFO);
+
+    // Filter enabling and disabling when left sidebar changes to streamline notebook creation from launcher.
+    app.restored
+      .then(() => {
+        themeManager.themeChanged.connect(onThemeChanged);
+
+        const shellAny = app.shell as any;
+
+        if (shellAny?._leftHandler?._sideBar?.currentChanged) {
+          shellAny._leftHandler._sideBar.currentChanged.connect(
+            (sender: any, args: any) => {
+              if (args.currentTitle._caption === 'Google Cloud Storage') {
+                gcsDrive.selected_panel = args.currentTitle._caption;
+                gcsBrowserWidget.browser.showFileFilter = true;
+                gcsBrowserWidget.browser.showFileFilter = false;
+              }else {
+                gcsDrive.selected_panel = args.currentTitle._caption;
+                defaultBrowser.showFileFilter = true;
+                defaultBrowser.showFileFilter = false;
+              }
+            }
+          );
+        }
+      })
+      .catch(error => {
+        console.error('Error during app restoration:', error);
+      });
   }
 };
 
