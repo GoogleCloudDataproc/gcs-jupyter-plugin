@@ -172,7 +172,7 @@ class Client(tornado.web.RequestHandler):
             client = storage.Client(project=project, credentials=creds)
 
             # Format the folder path
-            new_folder_path = str(pathlib.PosixPath(path).joinpath(folder_name))
+            new_folder_path = str(pathlib.PosixPath(path).joinpath(folder_name))+"/"
             
             self.log.info(f"Creating folder at: {new_folder_path}")
 
