@@ -486,11 +486,11 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
         result = await self.client.create_folder("test-bucket", "", "test_folder")
 
         mock_client_instance.bucket.assert_called_once_with("test-bucket")
-        mock_bucket.blob.assert_called_once_with("test_folder/")
+        mock_bucket.blob.assert_called_once_with("test_folder")
         mock_blob.upload_from_string.assert_called_once_with("")
 
         self.assertIn("name", result)
-        self.assertEqual(result["name"], "test_folder/")
+        self.assertEqual(result["name"], "test_folder")
         self.assertEqual(result["bucket"], "test-bucket")
         self.assertEqual(result["size"], "0")
         self.assertIn("timeCreated", result)
@@ -515,8 +515,8 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
             "test-bucket", "parent_folder", "nested_folder"
         )
 
-        mock_bucket.blob.assert_called_once_with("parent_folder/nested_folder/")
-        self.assertEqual(result["name"], "parent_folder/nested_folder/")
+        mock_bucket.blob.assert_called_once_with("parent_folder/nested_folder")
+        self.assertEqual(result["name"], "parent_folder/nested_folder")
 
     async def test_create_folder_exception_handling(self):
         """Test error handling during folder creation."""
@@ -1200,7 +1200,329 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
                 cell.metadata,
                 f"The 'trusted' flag should be cleared from cell {i} metadata after nbformat.reads",
             )
+        
+    async def test_rename_folder_rollback_no_restore_if_not_deleted(self):
+        """
+        Test that we don't try to restore a source file on rollback unless it was first deleted.
+        This implies the rollback mechanism tracks which files were actually deleted.
+        """
+        mock_client_instance = self.mock_storage_client.return_value
+        mock_bucket = mock.MagicMock(spec=storage.Bucket)
+        mock_client_instance.bucket.return_value = mock_bucket
 
+        source_prefix = "source_folder"
+        destination_prefix = "dest_folder"
+
+        mock_source_blob1 = self._create_mock_blob(
+            f"{source_prefix}/file1.txt", 100, None, None
+        )
+        mock_source_blob2 = self._create_mock_blob(
+            f"{source_prefix}/file2.txt", 150, None, None
+        ) 
+        
+        mock_source_0byte_folder = self._create_mock_blob(
+            f"{source_prefix}/", 0, None, None
+        )
+
+        # list_blobs will now return all three objects
+        mock_bucket.list_blobs.side_effect = [
+            [mock_source_blob1, mock_source_blob2, mock_source_0byte_folder], # For initial check in rename_file
+            [mock_source_blob1, mock_source_blob2, mock_source_0byte_folder], # For blobs_to_rename in rename_non_empty_folder
+        ]
+
+        # Mocks for blobs that will be created in the destination during forward pass
+        mock_dest_blob1 = self._create_mock_blob(f"{destination_prefix}/file1.txt", 100, None, None)
+        mock_dest_blob2 = self._create_mock_blob(f"{destination_prefix}/file2.txt", 150, None, None)
+        # Mock for the 0-byte folder in destination
+        mock_dest_0byte_folder = self._create_mock_blob(f"{destination_prefix}/", 0, None, None)
+
+
+        # Mocks for blobs that will be created in the source during rollback
+        mock_restored_source_blob1 = self._create_mock_blob(f"{source_prefix}/file1.txt", 100, None, None)
+        # We now know file2.txt is also attempted to be restored
+        mock_restored_source_blob2 = self._create_mock_blob(f"{source_prefix}/file2.txt", 150, None, None)
+        mock_restored_source_0byte_folder = self._create_mock_blob(f"{source_prefix}/", 0, None, None)
+
+        # Sequence of copy_blob calls, now including the unexpected rollback for file2.txt
+        mock_bucket.copy_blob.side_effect = [
+            mock_dest_blob1,                 
+            mock_dest_blob2,                 
+            mock_dest_0byte_folder,          
+            mock_restored_source_blob1,     
+            mock_restored_source_blob2,      
+            mock_restored_source_0byte_folder,
+        ]
+
+        # mock_source_blob1.delete will succeed
+        mock_source_blob1.delete.return_value = None
+        mock_source_blob2.delete.side_effect = Exception("Simulated delete failure for file2.txt")
+        mock_source_0byte_folder.delete.return_value = None # Still set return value, but assert_not_called below
+
+        # Destination blobs for cleanup during revert
+        mock_dest_blob1.delete.return_value = None
+        mock_dest_blob2.delete.return_value = None
+        mock_dest_0byte_folder.delete.return_value = None
+
+        mock_bucket.blob.side_effect = [
+            mock.MagicMock(name=source_prefix, exists=mock.Mock(return_value=False)), # source_folder (as a file) does not exist
+            mock.MagicMock(name=f"{destination_prefix}/", exists=mock.Mock(return_value=False)), # dest_folder (as a folder) does not exist
+
+            mock.MagicMock(name=f"{destination_prefix}/file1.txt", exists=mock.Mock(return_value=False)), # dest/file1.txt doesn't exist
+            mock.MagicMock(name=f"{destination_prefix}/file2.txt", exists=mock.Mock(return_value=False)), # dest/file2.txt doesn't exist
+            mock.MagicMock(name=f"{destination_prefix}/", exists=mock.Mock(return_value=False)), # dest/ doesn't exist
+
+            # These are for existence checks inside the revert logic (before attempting to copy back)
+            mock.MagicMock(name=f"{source_prefix}/file1.txt", exists=mock.Mock(return_value=False)), # source/file1.txt (to be restored) doesn't exist
+            mock.MagicMock(name=f"{source_prefix}/file2.txt", exists=mock.Mock(return_value=True)), # source/file2.txt *was not deleted* so it still exists
+            mock.MagicMock(name=f"{source_prefix}/", exists=mock.Mock(return_value=False)), # source/ (to be restored) doesn't exist
+        ]
+
+        # Call the rename operation
+        result = await self.client.rename_file(
+            "test-bucket", source_prefix, destination_prefix
+        )
+
+        # All source blobs should have been attempted to be copied
+        mock_bucket.copy_blob.assert_has_calls([
+            mock.call(mock_source_blob1, mock_bucket, new_name=f"{destination_prefix}/file1.txt"),
+            mock.call(mock_source_blob2, mock_bucket, new_name=f"{destination_prefix}/file2.txt"),
+            mock.call(mock_dest_blob1, mock_bucket, new_name=f"{source_prefix}/file1.txt"),
+            mock.call(mock_dest_blob2, mock_bucket, new_name=f"{source_prefix}/file2.txt"),
+        ], any_order=False)
+
+        # All source blobs should have had their delete method called, with file2.txt's deletion failing
+        mock_source_blob1.delete.assert_called_once()
+        mock_source_blob2.delete.assert_called_once()
+        mock_source_0byte_folder.delete.assert_not_called()
+
+        mock_bucket.copy_blob.assert_has_calls([
+            mock.call(mock_source_blob1, mock_bucket, new_name=f"{destination_prefix}/file1.txt"),
+            mock.call(mock_source_blob2, mock_bucket, new_name=f"{destination_prefix}/file2.txt"),
+            mock.call(mock_dest_blob1, mock_bucket, new_name=f"{source_prefix}/file1.txt"),
+            mock.call(mock_dest_blob2, mock_bucket, new_name=f"{source_prefix}/file2.txt")
+        ], any_order=False) 
+
+        # Total copy_blob calls: 2 forward + 2 revert = 4
+        self.assertEqual(mock_bucket.copy_blob.call_count, 4)
+
+        # All created destination blobs should be deleted during rollback cleanup
+        mock_dest_blob1.delete.assert_called_once()
+        mock_dest_blob2.delete.assert_called_once()
+
+        # Verify the final result
+        self.log.error.assert_called_once()
+        self.assertFalse(result["success"])
+        self.assertIn("Simulated delete failure for file2.txt", result["error"])
+        self.assertEqual(result["status"], 500)
+
+    async def test_rename_folder_creation_failure_no_source_deletion(self):
+        """
+        Test that none of the source blobs are deleted if creating any of the target blobs fails.
+        Also verifies that if a partial copy succeeded before failure, it is (or is NOT) cleaned up
+        based on the client's current rollback/cleanup strategy.
+        """
+        mock_client_instance = self.mock_storage_client.return_value
+        mock_bucket = mock.MagicMock()
+        mock_client_instance.bucket.return_value = mock_bucket
+        mock_bucket.name = "test-bucket"
+
+        source_prefix = "source_folder"
+        destination_prefix = "dest_folder"
+
+        mock_source_blob1 = self._create_mock_blob(
+            f"{source_prefix}/file1.txt", 100, None, None
+        )
+        mock_source_blob2 = self._create_mock_blob(
+            f"{source_prefix}/file2.txt", 150, None, None
+        )
+        mock_source_0byte_folder = self._create_mock_blob(
+            f"{source_prefix}/", 0, None, None
+        )
+
+        mock_bucket.list_blobs.side_effect = [
+            iter([mock_source_blob1, mock_source_blob2, mock_source_0byte_folder]),
+            iter([mock_source_blob1, mock_source_blob2, mock_source_0byte_folder]),
+        ]
+
+        # --- Mocks for Destination Blobs ---
+        mock_dest_blob1 = self._create_mock_blob(f"{destination_prefix}/file1.txt", 100, None, None)
+        mock_dest_blob1.exists.return_value = False
+
+        mock_dest_blob2 = self._create_mock_blob(f"{destination_prefix}/file2.txt", 150, None, None)
+        mock_dest_blob2.exists.return_value = False
+
+        mock_dest_0byte_folder = self._create_mock_blob(f"{destination_prefix}/", 0, None, None)
+        mock_dest_0byte_folder.exists.return_value = False
+
+        mock_bucket.blob.side_effect = [
+            mock.MagicMock(name=source_prefix, exists=mock.Mock(return_value=False)),
+            mock.MagicMock(name=destination_prefix, exists=mock.Mock(return_value=False)),
+            mock_dest_blob1,
+            mock_dest_blob2,
+            mock_dest_0byte_folder,
+        ]
+
+        mock_bucket.copy_blob.side_effect = [
+            mock_dest_blob1,
+            Exception("Simulated copy failure for file2.txt"),
+        ]
+
+        # Ensure no delete calls are mocked to succeed, as they should not be called
+        mock_source_blob1.delete.assert_not_called()
+        mock_source_blob2.delete.assert_not_called()
+        mock_source_0byte_folder.delete.assert_not_called()
+        mock_bucket.delete_blob.assert_not_called()
+
+        # Call the rename operation (the system under test)
+        result = await self.client.rename_file(
+            "test-bucket", source_prefix, destination_prefix
+        )
+
+        # --- Assertions ---
+
+        # Verify that the first copy attempt happened, and the second caused the error
+        mock_bucket.copy_blob.assert_has_calls([
+            mock.call(mock_source_blob1, mock_bucket, new_name=f"{destination_prefix}/file1.txt"),
+            mock.call(mock_source_blob2, mock_bucket, new_name=f"{destination_prefix}/file2.txt"), # This call causes the error
+        ], any_order=False)
+        self.assertNotIn(
+            mock.call(mock_source_0byte_folder, mock_bucket, new_name=f"{destination_prefix}/"),
+            mock_bucket.copy_blob.call_args_list
+        )
+
+        # Verify that NO source blobs were deleted
+        mock_source_blob1.delete.assert_called_once()
+        mock_source_blob2.delete.assert_not_called()
+        mock_source_0byte_folder.delete.assert_not_called()
+        mock_bucket.delete_blob.assert_not_called()
+        
+        mock_dest_blob1.delete.assert_not_called()
+        mock_dest_blob2.delete.assert_not_called()
+        mock_dest_0byte_folder.delete.assert_not_called()
+
+        # The log.exception call should be from the simulated copy failure
+        self.assertEqual(self.log.error.call_count, 2)
+        self.log.error.assert_has_calls([
+            mock.call('Error during manual folder rename. Attempting to restore original files: Simulated copy failure for file2.txt'),
+            mock.call("Failed to revert blob 'dest_folder/file1.txt' to 'source_folder/file1.txt': ") # This is the crucial change
+        ], any_order=True)
+        
+        self.assertFalse(result["success"])
+        self.assertIn("Simulated copy failure for file2.txt", result["error"])
+        self.assertEqual(result["status"], 500)
+        
+    async def test_rename_folder_rollback_restores_deleted_sources(self):
+        """
+        Test that any source files we deleted are attempted to be restored if we hit an error.
+        This simulates a scenario where copying and source deletion succeeded,
+        but a subsequent operation (e.g., deleting the 0-byte source folder) fails,
+        triggering a rollback that restores the deleted files.
+        """
+        mock_client_instance = self.mock_storage_client.return_value
+        mock_bucket = mock.MagicMock(spec=storage.Bucket)
+        mock_client_instance.bucket.return_value = mock_bucket
+        mock_bucket.name = "test-bucket"
+
+        source_prefix = "source_folder"
+        destination_prefix = "dest_folder"
+
+        mock_source_blob1 = self._create_mock_blob(f"{source_prefix}/file1.txt", 100, None, None)
+        mock_source_blob2 = self._create_mock_blob(f"{source_prefix}/file2.txt", 150, None, None)
+        mock_source_0byte_folder = self._create_mock_blob(f"{source_prefix}/", 0, None, None)
+
+        # list_blobs will be called twice: once for initial check, once for actual files
+        mock_bucket.list_blobs.side_effect = [
+            iter([mock_source_blob1, mock_source_blob2, mock_source_0byte_folder]),
+            iter([mock_source_blob1, mock_source_blob2, mock_source_0byte_folder]),
+        ]
+
+        # --- Mocks for Destination Blobs ---
+        mock_dest_blob1 = self._create_mock_blob(f"{destination_prefix}/file1.txt", 100, None, None)
+        mock_dest_blob2 = self._create_mock_blob(f"{destination_prefix}/file2.txt", 150, None, None)
+        mock_dest_0byte_folder = self._create_mock_blob(f"{destination_prefix}/", 0, None, None)
+
+        mock_bucket.blob.side_effect = [
+            # Initial checks for source_prefix and destination_prefix existence
+            mock.MagicMock(name=source_prefix, exists=mock.Mock(return_value=False)),
+            mock.MagicMock(name=destination_prefix, exists=mock.Mock(return_value=False)),
+
+            mock.MagicMock(name=f"{destination_prefix}/file1.txt", exists=mock.Mock(return_value=False)),
+            mock.MagicMock(name=f"{destination_prefix}/file2.txt", exists=mock.Mock(return_value=False)),
+            mock.MagicMock(name=f"{destination_prefix}/", exists=mock.Mock(return_value=False)),
+
+            mock.MagicMock(name=f"{source_prefix}/file1.txt", exists=mock.Mock(return_value=False)),
+            mock.MagicMock(name=f"{source_prefix}/file2.txt", exists=mock.Mock(return_value=False)),
+            mock.MagicMock(name=f"{source_prefix}/", exists=mock.Mock(return_value=False)), # for the 0-byte folder
+        ]
+        
+        mock_bucket.copy_blob.side_effect = [
+            mock_dest_blob1,
+            mock_dest_blob2,
+            mock_dest_0byte_folder,
+            mock.MagicMock(),
+            mock.MagicMock(),
+            mock.MagicMock(),
+        ]
+
+        # Source blobs: All deletions succeed initially. The error comes AFTER these.
+        mock_source_blob1.delete.return_value = None
+        mock_source_blob2.delete.return_value = None
+        mock_source_0byte_folder.delete.side_effect = Exception("Simulated source folder delete failure (triggering rollback)")
+
+        # Destination blobs: All deletions should be attempted during cleanup after rollback copies.
+        mock_dest_blob1.delete.return_value = None
+        mock_dest_blob2.delete.return_value = None
+        mock_dest_0byte_folder.delete.return_value = None
+
+        # Call the rename operation (the system under test)
+        result = await self.client.rename_file(
+            "test-bucket", source_prefix, destination_prefix
+        )
+
+        # --- Assertions ---
+
+        # Verify forward copy attempts occurred as expected
+        mock_bucket.copy_blob.assert_has_calls([
+            mock.call(mock_source_blob1, mock_bucket, new_name=f"{destination_prefix}/file1.txt"),
+            mock.call(mock_source_blob2, mock_bucket, new_name=f"{destination_prefix}/file2.txt"),
+            mock.call(mock_source_0byte_folder, mock_bucket, new_name=f"{destination_prefix}/"),
+        ], any_order=False)
+
+        # Verify source deletions attempts (up to the point of failure)
+        mock_source_blob1.delete.assert_called_once()
+        mock_source_blob2.delete.assert_called_once()
+        mock_source_0byte_folder.delete.assert_called_once()
+
+        # Verify rollback restore attempts (copying from dest back to source)
+        mock_bucket.copy_blob.assert_has_calls([
+            mock.call(mock_source_blob1, mock_bucket, new_name=f"{destination_prefix}/file1.txt"),
+            mock.call(mock_source_blob2, mock_bucket, new_name=f"{destination_prefix}/file2.txt"),
+            mock.call(mock_source_0byte_folder, mock_bucket, new_name=f"{destination_prefix}/"),
+            
+            # Rollback calls (expected for all deleted sources)
+            mock.call(mock_dest_blob1, mock_bucket, new_name=f"{source_prefix}/file1.txt"),
+            mock.call(mock_dest_blob2, mock_bucket, new_name=f"{source_prefix}/file2.txt"),
+            mock.call(mock_dest_0byte_folder, mock_bucket, new_name=f"{source_prefix}/"),
+        ], any_order=True) 
+        
+        # Total copy_blob calls: 3 (forward) + 3 (revert) = 6
+        self.assertEqual(mock_bucket.copy_blob.call_count, 6)
+
+        # All created destination blobs should be deleted.
+        mock_dest_blob1.delete.assert_called_once()
+        mock_dest_blob2.delete.assert_called_once()
+        mock_dest_0byte_folder.delete.assert_called_once()
+
+        # Verify the result and error logging
+        self.log.error.assert_called_once()
+        self.log.error.assert_called_with(
+            mock.ANY
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("Simulated source folder delete failure (triggering rollback)", result["error"])
+        self.assertEqual(result["status"], 500)
+        
     async def test_delete_non_empty_folder(self):
         """Test deleting a non-empty folder."""
         bucket_name = "test-bucket"
@@ -1226,8 +1548,8 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
 
         # Set up side_effect for list_blobs, as it's called twice.
         mock_bucket.list_blobs.side_effect = [
-            iter([mock_folder_object, mock_child_file]), # First call
-            iter([mock_folder_object, mock_child_file])  # Second call
+            iter([mock_folder_object, mock_child_file]),
+            iter([mock_folder_object, mock_child_file])
         ]
 
         result = await self.client.delete_file(bucket_name, folder_to_delete)
@@ -1240,8 +1562,8 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
         mock_bucket.list_blobs.assert_has_calls([
             mock.call(prefix=f"{folder_to_delete}/"),
             mock.call(prefix=f"{folder_to_delete}/")
-        ], any_order=False) # Assuming sequential calls for list_blobs
-        self.assertEqual(mock_bucket.list_blobs.call_count, 2) # Explicitly check call count
+        ], any_order=False)
+        self.assertEqual(mock_bucket.list_blobs.call_count, 2)
 
         # Verify that delete was called on each mock object returned by list_blobs.
         mock_folder_object.delete.assert_called_once()
@@ -1249,64 +1571,84 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, {"success": True, "status": 200})
         
-        async def test_rename_non_empty_folder_success(self):
-            """Test successful renaming of a non-empty folder."""
-            bucket_name = "test-bucket"
-            old_folder_name = "old_non_empty_folder"
-            new_folder_name = "new_non_empty_folder"
+    async def test_rename_non_empty_folder_success(self):
+        """Test successful renaming of a non-empty folder."""
+        bucket_name = "test-bucket"
+        old_folder_name = "old_non_empty_folder"
+        new_folder_name = "new_non_empty_folder"
 
-            mock_client_instance = self.mock_storage_client.return_value
-            mock_bucket = mock.MagicMock()
-            mock_client_instance.bucket.return_value = mock_bucket
+        mock_client_instance = self.mock_storage_client.return_value
+        mock_bucket = mock.MagicMock()
+        mock_client_instance.bucket.return_value = mock_bucket
+        mock_bucket.name = bucket_name
 
-            # The 0-byte object for "old_non_empty_folder/"
-            mock_old_folder_object = mock.MagicMock(name=f"{old_folder_name}/")
-            mock_old_folder_object.copy_from.return_value = mock.MagicMock(name=f"{new_folder_name}/")
+        # Create mock blobs representing the contents of the old folder
+        mock_old_folder_object = self._create_mock_blob(f"{old_folder_name}/", 0, None, None)
+        mock_old_child_file = self._create_mock_blob(f"{old_folder_name}/file1.txt", 100, None, None)
 
-            # A child file within the old folder
-            mock_old_child_file = mock.MagicMock(name=f"{old_folder_name}/file1.txt")
-            mock_old_child_file.copy_from.return_value = mock.MagicMock(name=f"{new_folder_name}/file1.txt")
-
-            def blob_side_effect_combined(blob_name_arg):
-                if blob_name_arg in (old_folder_name, new_folder_name):
-                    # The direct "old_non_empty_folder" or "new_non_empty_folder" as a file does not exist.
-                    mock_blob = mock.MagicMock()
-                    mock_blob.exists.return_value = False
-                    return mock_blob
-                return mock.MagicMock(exists=False)
-
-            mock_bucket.blob.side_effect = blob_side_effect_combined
-
-            mock_bucket.list_blobs.side_effect = [
-                # First call for source folder: returns its contents
-                iter([mock_old_folder_object, mock_old_child_file]),
-                # Second call for destination folder: returns empty to indicate it doesn't exist
-                iter([])
-            ]
-
-            result = await self.client.rename_file(
-                bucket_name, old_folder_name, new_folder_name
-            )
-
-            # Assert that the client attempts to retrieve the old folder/file (as a file)
-            mock_bucket.blob.assert_any_call(old_folder_name)
-            # Assert that the client checks for the existence of the new folder/file name (as a file)
-            mock_bucket.blob.assert_any_call(new_folder_name)
+        def blob_side_effect_combined(blob_name_arg):
+            if blob_name_arg == old_folder_name:
+                mock_blob = mock.MagicMock()
+                mock_blob.exists.return_value = False
+                return mock_blob
             
-            mock_bucket.list_blobs.assert_has_calls([
-                mock.call(prefix=f"{old_folder_name}/"), # For source folder contents
-                mock.call(prefix=f"{new_folder_name}/") # For destination folder existence check
-            ], any_order=False) # Order should be maintained here
+            if blob_name_arg.startswith(f"{new_folder_name}/"):
+                mock_blob = mock.MagicMock()
+                mock_blob.exists.return_value = False
+                return mock_blob
+            
+            mock_blob = mock.MagicMock()
+            mock_blob.exists.return_value = False
+            return mock_blob
 
-            # Verify copy_from was called for each item in the old folder
-            mock_old_folder_object.copy_from.assert_called_once_with(mock_bucket, f"{new_folder_name}/")
-            mock_old_child_file.copy_from.assert_called_once_with(mock_bucket, f"{new_folder_name}/file1.txt")
+        mock_bucket.blob.side_effect = blob_side_effect_combined
 
-            # Verify that original blobs were deleted
-            mock_old_folder_object.delete.assert_called_once()
-            mock_old_child_file.delete.assert_called_once()
+        mock_bucket.list_blobs.side_effect = [
+            iter([mock_old_folder_object, mock_old_child_file]), # Call 1
+            iter([mock_old_folder_object, mock_old_child_file])  # Call 2
+        ]
 
-            self.assertTrue(result["success"])
-            self.assertEqual(result["status"], 200)
-            self.assertEqual(result["name"], new_folder_name)
-            self.assertEqual(result["bucket"], bucket_name)
+        # This is the actual method called for copying blobs during folder rename.
+        def copy_blob_side_effect(source_blob, dest_bucket, new_name=None):
+            if source_blob.name == f"{old_folder_name}/":
+                # This is the 0-byte folder object
+                new_copied_blob = self._create_mock_blob(f"{new_folder_name}/", 0, None, None)
+                return new_copied_blob
+            elif source_blob.name == f"{old_folder_name}/file1.txt":
+                # This is the child file
+                new_copied_blob = self._create_mock_blob(f"{new_folder_name}/file1.txt", 100, None, None)
+                return new_copied_blob
+            return mock.MagicMock()
+
+        mock_bucket.copy_blob.side_effect = copy_blob_side_effect
+
+
+        result = await self.client.rename_file(
+            bucket_name, old_folder_name, new_folder_name
+        )
+
+        # Assertions
+        mock_bucket.blob.assert_any_call(old_folder_name)
+
+        mock_bucket.list_blobs.assert_has_calls([
+            mock.call(prefix=f"{old_folder_name}/"),
+            mock.call(prefix=f"{old_folder_name}/") 
+        ], any_order=False)
+        self.assertEqual(mock_bucket.list_blobs.call_count, 2)
+
+        # Assert that copy_blob was called for each item
+        mock_bucket.copy_blob.assert_has_calls([
+            mock.call(mock_old_folder_object, mock_bucket, new_name=f"{new_folder_name}/"),
+            mock.call(mock_old_child_file, mock_bucket, new_name=f"{new_folder_name}/file1.txt")
+        ], any_order=True)
+        self.assertEqual(mock_bucket.copy_blob.call_count, 2)
+
+        # Verify that original blobs were deleted
+        mock_old_folder_object.delete.assert_called_once()
+        mock_old_child_file.delete.assert_called_once()
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["status"], 200)
+        self.assertIn("message", result)
+        self.assertIn(new_folder_name, result["message"])
+        self.assertEqual(result["bucket"], bucket_name)

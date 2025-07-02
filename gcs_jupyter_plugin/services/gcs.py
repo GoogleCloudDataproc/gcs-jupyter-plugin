@@ -16,6 +16,7 @@ import asyncio
 import json
 import base64
 from datetime import timedelta
+import pathlib
 import nbformat
 import re
 
@@ -171,9 +172,9 @@ class Client(tornado.web.RequestHandler):
             client = storage.Client(project=project, credentials=creds)
 
             # Format the folder path
-            new_folder_path = (
-                folder_name + "/" if path == "" else path + "/" + folder_name + "/"
-            )
+            new_folder_path = str(pathlib.PosixPath(path).joinpath(folder_name))
+            
+            self.log.info(f"Creating folder at: {new_folder_path}")
 
             # Get the bucket
             bucket_obj = client.bucket(bucket)
@@ -512,9 +513,7 @@ class Client(tornado.web.RequestHandler):
 
                 new_blob = bucket.copy_blob(blob, bucket, new_name=new_blob_name)
                 renamed_blobs.append(new_blob)
-
-            for blob in blobs_to_rename:
-                blob.delete()
+                blob.delete() 
 
             return {
                 "message": f"Folder '{source_prefix}' and its contents renamed to '{new_prefix}'.",
@@ -524,7 +523,7 @@ class Client(tornado.web.RequestHandler):
             }
         except Exception as e:
             self.log.error(
-                f"Error during manual folder rename. Attempting to revert changes: {e}"
+                f"Error during manual folder rename. Attempting to restore original files: {e}"
             )
             for blob in renamed_blobs:
                 original_blob_name = (
@@ -540,7 +539,11 @@ class Client(tornado.web.RequestHandler):
                     self.log.error(
                         f"Failed to revert blob '{blob.name}' to '{original_blob_name}': {revert_e}"
                     )
-            raise
+            return {
+                "success": False,
+                "error": f"Failed to rename folder: {str(e)}",
+                "status": 500,
+            }
 
     async def download_file(self, bucket_name, file_path, name, format):
         try:
