@@ -486,11 +486,11 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
         result = await self.client.create_folder("test-bucket", "", "test_folder")
 
         mock_client_instance.bucket.assert_called_once_with("test-bucket")
-        mock_bucket.blob.assert_called_once_with("test_folder")
+        mock_bucket.blob.assert_called_once_with("test_folder/")
         mock_blob.upload_from_string.assert_called_once_with("")
 
         self.assertIn("name", result)
-        self.assertEqual(result["name"], "test_folder")
+        self.assertEqual(result["name"], "test_folder/")
         self.assertEqual(result["bucket"], "test-bucket")
         self.assertEqual(result["size"], "0")
         self.assertIn("timeCreated", result)
@@ -515,8 +515,8 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
             "test-bucket", "parent_folder", "nested_folder"
         )
 
-        mock_bucket.blob.assert_called_once_with("parent_folder/nested_folder")
-        self.assertEqual(result["name"], "parent_folder/nested_folder")
+        mock_bucket.blob.assert_called_once_with("parent_folder/nested_folder/")
+        self.assertEqual(result["name"], "parent_folder/nested_folder/")
 
     async def test_create_folder_exception_handling(self):
         """Test error handling during folder creation."""
