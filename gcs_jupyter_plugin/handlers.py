@@ -50,7 +50,7 @@ class CredentialsHandler(APIHandler):
     @tornado.web.authenticated
     async def post(self):
         cached = await credentials.get_cached()
-        cached.pop("access_token") # Remove sensitive information
+        cached.pop("access_token", None) # Remove sensitive information
         if cached["config_error"] == 1:
             self.log.exception("Error fetching credentials from gcloud")
         self.finish(json.dumps(cached))
