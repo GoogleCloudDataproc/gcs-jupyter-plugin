@@ -92,7 +92,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           console.error('GCS backend health check failed:', error);
           await showDialog({
             title: 'Jupyter Server Error',
-            body: 'The Google Cloud Storage plugin has been installed. Please restart your jupyter lab.',
+            body: 'Google Cloud Storage Extension is installed. Please restart your Jupyter Server for the changes to take effect.',
             buttons: [Dialog.okButton()]
           });
         }
