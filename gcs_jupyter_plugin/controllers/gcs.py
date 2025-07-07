@@ -23,6 +23,20 @@ from gcs_jupyter_plugin.services import gcs
 from gcs_jupyter_plugin.commons.constants import MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE
 
 
+class GCSHealthController(APIHandler):
+    @tornado.web.authenticated
+    async def get(self):
+        try:
+            self.set_status(200)
+            self.finish(json.dumps({
+                'status': 'ok',
+                'message': 'GCS plugin server extension is active.'
+            }))
+        except Exception as e:
+            self.log.error("Health Check for Server is failed.")
+            self.set_status(500)
+            self.finish(json.dumps({'status': 'error', 'message': str(e)}))
+
 class ListBucketsController(APIHandler):
     @tornado.web.authenticated
     async def get(self):

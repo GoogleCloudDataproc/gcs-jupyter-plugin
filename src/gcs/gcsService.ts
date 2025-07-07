@@ -52,8 +52,12 @@ export class GcsService {
    * @see https://cloud.google.com/storage/docs/listing-buckets#rest-list-buckets
    */
   static async listBuckets() {
-    const data = (await requestAPI('api/storage/listBuckets')) as any;
-    return data;
+    try{
+      const data = (await requestAPI('api/storage/listBuckets')) as any;
+      return data;
+    } catch (error: any) {
+      console.error(error?.message ?? 'Error fetching Buckets');
+    }
   }
 
   /**

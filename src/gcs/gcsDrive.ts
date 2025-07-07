@@ -48,7 +48,7 @@ export class GCSDrive implements Contents.IDrive {
   private _isDisposed = false;
   private _fileChanged = new Signal<this, Contents.IChangedArgs>(this);
   private _saveSpinner: Spinner | null = null;
-  selected_panel: String | null = null;
+  selected_panel: string | null = null;
 
   constructor(app: JupyterFrontEnd) {
     // Not actually used, but the Contents.IDrive interface requires one.
@@ -278,7 +278,7 @@ export class GCSDrive implements Contents.IDrive {
     options?: Contents.ICreateOptions
   ): Promise<Contents.IModel> {
     if(this.selected_panel !== 'Google Cloud Storage') {
-      return Promise.reject(new Error('Please select file browser panel for creating new file.'));
+      return Promise.reject(new Error('Cloud Storage Browser has the file system context. To create a notebook in your local file system, switch the file system context by selecting a folder in File Browser.'));
     }
     if (!options) {
       console.error('No data provided for this operation. :', options);
@@ -299,7 +299,7 @@ export class GCSDrive implements Contents.IDrive {
         });
         return Promise.reject();
       } else if (options.type === 'notebook') {
-        return Promise.reject('Notebooks cannot be created outside of a bucket.');
+        return Promise.reject('Notebooks have to be created inside a bucket. Open a bucket in the Cloud Storage Browser to create a new notebook.');
       } else {
         await showDialog({
           title: 'Error',
@@ -725,6 +725,39 @@ export class GCSDrive implements Contents.IDrive {
           });
 
           if (isOldPathMeetsFilename) {
+
+            // Creating Model Obj for Both Source and Destination (renamed)
+            const now = new Date().toISOString();
+
+            const oldModelObject: Partial<Contents.IModel> = {
+                name: path.split('\\').at(-1) ?? '',
+                path: path,
+                type: isOldPathMeetsFilename ? 'file' : 'directory',
+                writable: true,
+                created: now,
+                last_modified: now,
+                content: null,
+                format: isOldPathMeetsFilename ? 'text' : null
+            };
+
+            const newModelObject: Partial<Contents.IModel> = {
+                name: newLocalPath.split('\\').at(-1) ?? '',
+                path: newLocalPath,
+                type: isNewPathMeetsFilename ? 'file' : 'directory',
+                writable: true,
+                created: now,
+                last_modified: now,
+                content: null,
+                format: isNewPathMeetsFilename ? 'text' : null
+            };
+
+            // Emitting the Signal ( If file is opened, JupyterLab updates name in the editor. )
+            this._fileChanged.emit({
+              type: 'rename',
+              oldValue: oldModelObject,
+              newValue: newModelObject
+            });
+
             return {
               type: 'file',
               path: newLocalPath,
