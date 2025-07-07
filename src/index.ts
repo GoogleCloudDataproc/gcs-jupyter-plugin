@@ -12,9 +12,10 @@ import {
   IDefaultFileBrowser,
   IFileBrowserFactory
 } from '@jupyterlab/filebrowser';
-import { IThemeManager } from '@jupyterlab/apputils';
+import { Dialog, IThemeManager, showDialog } from '@jupyterlab/apputils';
 import { iconStorage, iconStorageDark } from './utils/icon';
 import { NAMESPACE, PLUGIN_ID } from './utils/const';
+import { requestAPI } from './handler';
 
 /**
  * Initialization data for the gcs-jupyter-plugin extension.
@@ -30,7 +31,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     IDocumentManager,
     IDefaultFileBrowser
   ],
-  activate: (
+  activate: async(
     app: JupyterFrontEnd,
     factory: IFileBrowserFactory,
     themeManager: IThemeManager,
@@ -82,7 +83,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Filter enabling and disabling when left sidebar changes to streamline notebook creation from launcher.
     app.restored
-      .then(() => {
+      .then(async () => {
+
+        try {
+          const url = `api/storage/health`;
+          await requestAPI(url) as any;
+        } catch (error) {
+          console.error('GCS backend health check failed:', error);
+          await showDialog({
+            title: 'Jupyter Server Error',
+            body: 'The Google Cloud Storage plugin has been installed. Please restart your jupyter lab.',
+            buttons: [Dialog.okButton()]
+          });
+        }
+
         themeManager.themeChanged.connect(onThemeChanged);
 
         const shellAny = app.shell as any;

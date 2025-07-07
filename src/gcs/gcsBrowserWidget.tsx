@@ -186,43 +186,15 @@ export class GcsBrowserWidget extends Widget {
     const browserToolbar: any = this._browser.toolbar;
 
     if (this.newFolder && !this.newFolder.isDisposed) {
-      if (typeof browserToolbar.removeItem === 'function') {
-        browserToolbar.removeItem(GcsBrowserWidget.NEW_FOLDER_ID);
-      } else if (typeof browserToolbar.removeWidget === 'function') {
-        browserToolbar.removeWidget(this.newFolder);
-      } else {
-        console.warn("Toolbar removeItem/removeWidget not found for New Folder. Old button may persist.");
-      }
       this.newFolder.dispose();
     }
     if (this.gcsUpload && !this.gcsUpload.isDisposed) {
-      if (typeof browserToolbar.removeItem === 'function') {
-        browserToolbar.removeItem(GcsBrowserWidget.FILE_UPLOAD_ID);
-      } else if (typeof browserToolbar.removeWidget === 'function') {
-        browserToolbar.removeWidget(this.gcsUpload);
-      } else {
-        console.warn("Toolbar removeItem/removeWidget not found for File Upload. Old button may persist.");
-      }
       this.gcsUpload.dispose();
     }
     if (this.refreshButton && !this.refreshButton.isDisposed) {
-      if (typeof browserToolbar.removeItem === 'function') {
-        browserToolbar.removeItem(GcsBrowserWidget.REFRESH_ID);
-      } else if (typeof browserToolbar.removeWidget === 'function') {
-        browserToolbar.removeWidget(this.refreshButton);
-      } else {
-        console.warn("Toolbar removeItem/removeWidget not found for Refresh. Old button may persist.");
-      }
       this.refreshButton.dispose();
     }
     if (this.toggleFileFilter && !this.toggleFileFilter.isDisposed) {
-      if (typeof browserToolbar.removeItem === 'function') {
-        browserToolbar.removeItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID);
-      } else if (typeof browserToolbar.removeWidget === 'function') {
-        browserToolbar.removeWidget(this.toggleFileFilter);
-      } else {
-        console.warn("Toolbar removeItem/removeWidget not found for Toggle File Filter. Old button may persist.");
-      }
       this.toggleFileFilter.dispose();
     }
 
@@ -247,8 +219,6 @@ export class GcsBrowserWidget extends Widget {
     } else {
         console.error("Toolbar addItem method not found at runtime. Cannot re-add buttons.");
     }
-
-    console.log('Theme changed:', isLight ? 'Light' : 'Dark');
   };
 
   // Function to trigger file input dialog when the upload button is clicked
@@ -454,9 +424,12 @@ export class GcsBrowserWidget extends Widget {
   }
 
   private readonly onPathChanged = () => {
-    // The below 2 lines of code is added as a workaround for switching to corresponding filebrowser context
-    this._browser.showFileFilter = false;
-    this._browser.showFileFilter = true;
+
+    // The below 2 lines of code is added as a workaround for resetting the file filter
+    if(this._browser.showFileFilter){
+      this._browser.showFileFilter = false;
+      this._browser.showFileFilter = true;
+    } 
 
     const currentPath = this._browser.model.path.split(':')[1];
     // Check if the current path is the root (empty string or just '/')
