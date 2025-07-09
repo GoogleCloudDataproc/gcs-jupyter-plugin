@@ -33,7 +33,7 @@ class GCSHealthController(APIHandler):
                 'message': 'GCS plugin server extension is active.'
             }))
         except Exception as e:
-            self.log.error("Health Check for Server is failedd: %s", str(e))
+            self.log.error("Health Check for Server is failed: %s", str(e))
             self.set_status(500)
             self.finish(json.dumps({'status': 'error', 'message': 'An internal error occurred during health check.'}))
 
