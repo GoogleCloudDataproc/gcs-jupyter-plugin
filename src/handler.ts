@@ -1,3 +1,20 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import { URLExt } from '@jupyterlab/coreutils';
 
 import { ServerConnection } from '@jupyterlab/services';
@@ -29,22 +46,19 @@ export async function requestAPI<T>(
 
   const rawResponseText = await response.text();
   const contentType = response.headers.get('Content-Type');
-  let data: any; // data can be string or object
 
-  if (contentType?.includes('application/json')) {
-    try {
-      data = JSON.parse(rawResponseText);
-    } catch (parseError) {
-      data = rawResponseText;
+  if(response.ok){
+    if (contentType?.includes('application/json')) {
+      try {
+        return JSON.parse(rawResponseText);
+      } catch (parseError) {
+        console.warn('Parse Error Occured : ' + parseError)
+        return rawResponseText as any;
+      }
+    } else {
+      return rawResponseText as any;
     }
   } else {
-    // For all other content types (like text/plain , octet-stream), read as raw text
-    data = rawResponseText;
+    throw new ServerConnection.ResponseError(response, `API request failed with status ${response.status}: ${response.statusText}`);
   }
-
-  if (!response.ok) {
-    throw new ServerConnection.ResponseError(response, data.message ?? data);
-  }
-
-  return data;
 }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +18,49 @@
 const { version } = require('../../package.json');
 export const VERSION_DETAIL = version;
 
-export const API_HEADER_CONTENT_TYPE = 'application/json';
-export const API_HEADER_BEARER = 'Bearer ';
-export const STATUS_SUCCESS = 'SUCCEEDED';
-
+/** gcs extension */
+export const GCS_PLUGIN_TITLE = 'Google Cloud Storage';
 export const NAMESPACE = 'gcs-jupyter-plugin:gcsBrowser';
 export const PLUGIN_ID = 'gcs-jupyter-plugin:plugin';
+
+/** auth */
+export const API_HEADER_CONTENT_TYPE = 'application/json';
+export const STATUS_SUCCESS = 'SUCCEEDED';
+
+/** API endpoints */
+export const CREDENTIAL_ENDPOINT = "credentials"
+export const LOG_ENDPOINT = "log";
+export const LOGIN_ENDPOINT = "login"
+export const LIST_BUCKETS_ENDPOINT = "api/storage/listBuckets"
+export const LIST_FILES_ENDPOINT = "api/storage/listFiles"
+export const LOAD_FILE_ENDPOINT = "api/storage/loadFile"
+export const CREATE_FOLDER_ENDPOINT = "api/storage/createFolder"
+export const SAVE_ENDPOINT = "api/storage/saveFile"
+export const DELETE_ENDPOINT = "api/storage/deleteFile"
+export const RENAME_ENDPOINT = "api/storage/renameFile"
+export const DOWNLOAD_ENDPOINT = "api/storage/downloadFile"
+export const HEALTH_ENDPOINT = "api/storage/health"
+
+/** toolbar items ( Used in Name and tooltip ) */
+export const NEW_FOLDER_ID = 'New Folder';
+export const FILE_UPLOAD_ID = 'File Upload';
+export const REFRESH_ID = 'Refresh';
+export const TOGGLE_FILE_FILTER_ID = 'Toggle File Filter';
+
+/** folder creation */
+export const DIRECTORY = 'directory'
+export const UNTITLED_DIRECTORY_NAME = 'UntitledFolder'
+
+/** file creation */
+export const FILE = 'file'
+export const UNTITLED_FILE_NAME = 'untitled'
+export const UNTITLED_FILE_EXT = '.txt'
+
+/** notebook creation */
+export const NOTEBOOK = 'notebook'
+export const UNTITLED_NOTEBOOK_NAME = 'Untitled'
+export const UNTITLED_NOTEBOOK_EXT = '.ipynb'
+
+/** Jupyter signals */
+export const DELETE_SIGNAL = 'delete'
+export const RENAME_SIGNAL = 'rename'

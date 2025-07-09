@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,10 +25,12 @@ import mime from 'mime-types';
 
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { GcsBrowserWidget } from './gcsBrowserWidget';
+import { DELETE_SIGNAL, DIRECTORY, FILE, GCS_PLUGIN_TITLE, NOTEBOOK, RENAME_SIGNAL, UNTITLED_DIRECTORY_NAME, UNTITLED_FILE_EXT, UNTITLED_FILE_NAME, UNTITLED_NOTEBOOK_EXT, UNTITLED_NOTEBOOK_NAME } from '../utils/const';
+import { BUCKET_LEVEL_FILE_CREATION_MESSAGE, BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE, BUCKET_RENAME_ERROR, DELETION_ERROR_TITLE, FILE_CREATION_ERROR_TITLE, FOLDER_CREATION_ERROR_TITLE, INVALID_FILE_NAME_ERROR, NAME_EXCEEDS_MAX_LENGTH_ERROR, NOTEBOOK_CREATION_ERROR_TITLE, NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE, RENAME_ERROR_TITLE, UNSUPPORTED_CREATE_ERROR, UNSUPPORTED_CREATE_TITLE } from '../utils/message';
 
 // Template for an empty Directory IModel.
 const DIRECTORY_IMODEL: Contents.IModel = {
-  type: 'directory',
+  type: DIRECTORY,
   path: '',
   name: '',
   format: null,
@@ -145,7 +147,7 @@ export class GCSDrive implements Contents.IDrive {
 
     const request: Contents.IFetchOptions = options || {};
 
-    if (request.type === 'file' || request.type === 'notebook') {
+    if (request.type === FILE || request.type === NOTEBOOK) {
       return await this.getFile(localPath, options);
     } else {
       return await this.getDirectory(localPath);
@@ -159,7 +161,7 @@ export class GCSDrive implements Contents.IDrive {
     const content = await GcsService.listBuckets();
 
     if (!content) {
-      throw `Error Listing Buckets ${content}`;
+      throw  new Error(`Error Listing Buckets ${content}`);
     }
     return {
       ...DIRECTORY_IMODEL,
@@ -221,7 +223,7 @@ export class GCSDrive implements Contents.IDrive {
             const pathParts = itemName.split('/');
             const name = pathParts.at(-1) ?? itemName;
             return {
-              type: 'file',
+              type: FILE,
               path: `${localPath}/${name}`,
               name: name,
               format: 'base64',
@@ -262,7 +264,7 @@ export class GCSDrive implements Contents.IDrive {
       throw 'File Loading Error';
     }
     return {
-      type: 'file',
+      type: FILE,
       path: localPath,
       name: localPath.split('\\').at(-1) ?? '',
       format: options?.format ?? 'text',
@@ -277,33 +279,33 @@ export class GCSDrive implements Contents.IDrive {
   async newUntitled(
     options?: Contents.ICreateOptions
   ): Promise<Contents.IModel> {
-    if(this.selected_panel !== 'Google Cloud Storage') {
-      return Promise.reject(new Error('Cloud Storage Browser has the file system context. To create a notebook in your local file system, switch the file system context by selecting a folder in File Browser.'));
+    if(this.selected_panel !== GCS_PLUGIN_TITLE) {
+      return Promise.reject(new Error(NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE));
     }
     if (!options) {
       console.error('No data provided for this operation. :', options);
-      return Promise.reject('No data provided for this operation.');
+      return Promise.reject(new Error('No data provided for this operation.'));
     } else if (!options.path) {
-      if (options.type === 'directory') {
+      if (options.type === DIRECTORY) {
         await showDialog({
-          title: 'Create Folder Error',
-          body: 'Folders cannot be created outside of a bucket.',
+          title: FOLDER_CREATION_ERROR_TITLE,
+          body: BUCKET_LEVEL_FOLDER_CREATION_MESSAGE,
           buttons: [Dialog.okButton()]
         });
         return Promise.reject();
-      } else if (options.type === 'file') {
+      } else if (options.type === FILE) {
         await showDialog({
-          title: 'Error Creating File',
-          body: 'Files cannot be created outside of a bucket.',
+          title: FILE_CREATION_ERROR_TITLE,
+          body: BUCKET_LEVEL_FILE_CREATION_MESSAGE,
           buttons: [Dialog.okButton()]
         });
         return Promise.reject();
-      } else if (options.type === 'notebook') {
-        return Promise.reject('Notebooks have to be created inside a bucket. Open a bucket in the Cloud Storage Browser to create a new notebook.');
+      } else if (options.type === NOTEBOOK) {
+        return Promise.reject(new Error(BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE));
       } else {
         await showDialog({
-          title: 'Error',
-          body: 'Unsupported creation type :' + options.type,
+          title: UNSUPPORTED_CREATE_TITLE,
+          body: UNSUPPORTED_CREATE_ERROR + options.type,
           buttons: [Dialog.okButton()]
         });
         return Promise.reject();
@@ -317,7 +319,7 @@ export class GCSDrive implements Contents.IDrive {
         'Cannot create new objects in the root directory:',
         localPath
       );
-      return Promise.reject('Cannot create new objects in the root directory.');
+      return Promise.reject(new Error('Cannot create new objects in the root directory.'));
     }
 
     const parsedPath = GcsService.pathParser(localPath);
@@ -325,17 +327,17 @@ export class GCSDrive implements Contents.IDrive {
     try {
       this._browserWidget?.showProgressBar();
       switch (options.type) {
-        case 'directory':
+        case DIRECTORY:
           return await this.createNewDirectory(localPath, parsedPath);
-        case 'file':
+        case FILE:
           return await this.createNewFile(localPath, parsedPath);
-        case 'notebook':
+        case NOTEBOOK:
           return await this.createNewNotebook(localPath, parsedPath);
         default:
           console.warn(`Unsupported creation type: ${options.type}`);
           await showDialog({
-            title: 'Unsupported Type Error',
-            body: `Unsupported creation type: ${options.type}.`,
+            title: UNSUPPORTED_CREATE_TITLE,
+            body: UNSUPPORTED_CREATE_ERROR + options.type,
             buttons: [Dialog.okButton()]
           });
           return DIRECTORY_IMODEL;
@@ -352,8 +354,8 @@ export class GCSDrive implements Contents.IDrive {
     const content = await GcsService.listFiles({
       prefix:
         parsedPath.path === ''
-          ? parsedPath.path + 'UntitledFolder'
-          : parsedPath.path + '/UntitledFolder',
+          ? parsedPath.path + UNTITLED_DIRECTORY_NAME
+          : parsedPath.path + '/' + UNTITLED_DIRECTORY_NAME,
       bucket: parsedPath.bucket
     });
 
@@ -378,7 +380,7 @@ export class GCSDrive implements Contents.IDrive {
     } else {
       untitledFolderSuffix = '';
     }
-    const folderName = 'UntitledFolder' + untitledFolderSuffix;
+    const folderName = UNTITLED_DIRECTORY_NAME + untitledFolderSuffix;
 
     const response = await GcsService.createFolder({
       bucket: parsedPath.bucket,
@@ -388,7 +390,7 @@ export class GCSDrive implements Contents.IDrive {
 
     if (response) {
       const result = {
-        type: 'directory',
+        type: DIRECTORY,
         path:
           localPath + (localPath.endsWith('/') ? folderName : '/' + folderName),
         name: folderName,
@@ -403,7 +405,7 @@ export class GCSDrive implements Contents.IDrive {
     } else {
       console.error('Failed to create folder.');
       await showDialog({
-        title: 'Error Creating Folder',
+        title: FOLDER_CREATION_ERROR_TITLE,
         body: `Folder ${folderName} creation is failed.`,
         buttons: [Dialog.okButton()]
       });
@@ -418,14 +420,14 @@ export class GCSDrive implements Contents.IDrive {
     const content = await GcsService.listFiles({
       prefix:
         parsedPath.path === ''
-          ? parsedPath.path + 'untitled'
-          : parsedPath.path + '/untitled',
+          ? parsedPath.path + UNTITLED_FILE_NAME
+          : parsedPath.path + '/' + UNTITLED_FILE_NAME,
       bucket: parsedPath.bucket
     });
 
     let maxSuffix = 1;
-    const baseFileName = 'untitled';
-    const fileExtension = '.txt';
+    const baseFileName = UNTITLED_FILE_NAME;
+    const fileExtension = UNTITLED_FILE_EXT;
 
     if (content.files) {
       content.files.forEach((file: { items: { name: string } }) => {
@@ -434,7 +436,7 @@ export class GCSDrive implements Contents.IDrive {
         const baseNameMatch = fileName.match(/^untitled(\d*)(\..*)?$/);
         if (baseNameMatch) {
           const suffix = baseNameMatch[1];
-          const ext = baseNameMatch[2] || '.txt';
+          const ext = baseNameMatch[2] || UNTITLED_FILE_EXT;
           if (ext === fileExtension && suffix) {
             const num = parseInt(suffix);
             if (!isNaN(num) && num >= maxSuffix) {
@@ -443,7 +445,7 @@ export class GCSDrive implements Contents.IDrive {
           } else if (
             ext === fileExtension &&
             maxSuffix === 1 &&
-            fileName === 'untitled.txt'
+            fileName === `${UNTITLED_FILE_NAME}${UNTITLED_FILE_EXT}`
           ) {
             maxSuffix = 2;
           }
@@ -473,7 +475,7 @@ export class GCSDrive implements Contents.IDrive {
       const mimetype = ext === '.json' ? 'application/json' : 'text/plain';
 
       return {
-        type: 'file',
+        type: FILE,
         path: `${localPath}/${newFileName}`,
         name: newFileName,
         format: 'text',
@@ -486,7 +488,7 @@ export class GCSDrive implements Contents.IDrive {
     } else {
       console.error('Failed to create file.');
       await showDialog({
-        title: 'Error Creating File',
+        title: FILE_CREATION_ERROR_TITLE,
         body: `File ${newFileName} creation is failed.`,
         buttons: [Dialog.okButton()]
       });
@@ -498,8 +500,8 @@ export class GCSDrive implements Contents.IDrive {
     localPath: string,
     parsedPath: { bucket: string; path: string; name: string | undefined }
   ): Promise<Contents.IModel> {
-    const notebookExtension = '.ipynb';
-    const baseNotebookName = 'Untitled';
+    const notebookExtension = UNTITLED_NOTEBOOK_EXT;
+    const baseNotebookName = UNTITLED_NOTEBOOK_NAME;
 
     const content = await GcsService.listFiles({
       prefix:
@@ -527,7 +529,7 @@ export class GCSDrive implements Contents.IDrive {
           } else if (
             ext === notebookExtension &&
             maxSuffix === 1 &&
-            fileName === 'Untitled.ipynb'
+            fileName === `${UNTITLED_NOTEBOOK_NAME}${UNTITLED_NOTEBOOK_EXT}`
           ) {
             maxSuffix = 2;
           }
@@ -575,7 +577,7 @@ export class GCSDrive implements Contents.IDrive {
 
     if (response) {
       return {
-        type: 'notebook',
+        type: NOTEBOOK,
         path: `${localPath}/${newNotebookName}`,
         name: newNotebookName,
         format: 'json',
@@ -588,7 +590,7 @@ export class GCSDrive implements Contents.IDrive {
     } else {
       console.error('Failed to create notebook.');
       await showDialog({
-        title: 'Error Creating Notebook',
+        title: NOTEBOOK_CREATION_ERROR_TITLE,
         body: `Notebook ${newNotebookName} creation failed.`,
         buttons: [Dialog.okButton()]
       });
@@ -614,7 +616,7 @@ export class GCSDrive implements Contents.IDrive {
       });
 
       return {
-        type: 'file',
+        type: FILE,
         path: localPath,
         name: localPath.split('\\').at(-1) ?? '',
         format: 'text',
@@ -644,13 +646,13 @@ export class GCSDrive implements Contents.IDrive {
 
       if (response.status === 200 || response.status === 204) {
         this._fileChanged.emit({
-          type: 'delete',
+          type: DELETE_SIGNAL,
           oldValue: { path },
           newValue: null
         });
       } else {
         await showDialog({
-          title: 'Deletion Error',
+          title: DELETION_ERROR_TITLE,
           body: response.error,
           buttons: [Dialog.okButton()]
         });
@@ -681,24 +683,24 @@ export class GCSDrive implements Contents.IDrive {
       newLocalPath.split('/')[newLocalPath.split('/').length - 1].length >= 1024
     ) {
       await showDialog({
-        title: 'Rename Error',
-        body: 'The maximum object length is 1024 characters.',
+        title: RENAME_ERROR_TITLE,
+        body: NAME_EXCEEDS_MAX_LENGTH_ERROR,
         buttons: [Dialog.okButton()]
       });
       return DIRECTORY_IMODEL;
     }
     if (!isOldPathMeetsFilename && oldPath.path === '') {
       await showDialog({
-        title: 'Rename Error',
-        body: 'Renaming Bucket is not allowed.',
+        title: RENAME_ERROR_TITLE,
+        body: BUCKET_RENAME_ERROR,
         buttons: [Dialog.okButton()]
       });
       return DIRECTORY_IMODEL;
     } else if (isOldPathMeetsFilename && !isNewPathMeetsFilename) {
       // Old path has file name and New file name given dont have extension
       await showDialog({
-        title: 'Rename Error',
-        body: 'Invalid File Name Provided.',
+        title: RENAME_ERROR_TITLE,
+        body: INVALID_FILE_NAME_ERROR,
         buttons: [Dialog.okButton()]
       });
       return DIRECTORY_IMODEL;
@@ -706,7 +708,7 @@ export class GCSDrive implements Contents.IDrive {
       try {
         this._browserWidget?.showProgressBar();
 
-        if (oldPath.path.includes('UntitledFolder' + untitledFolderSuffix)) {
+        if (oldPath.path.includes(UNTITLED_DIRECTORY_NAME + untitledFolderSuffix)) {
           oldPath.path = oldPath.path + '/';
           newPath.path = newPath.path + '/';
           path = path + '/';
@@ -730,9 +732,9 @@ export class GCSDrive implements Contents.IDrive {
             const now = new Date().toISOString();
 
             const oldModelObject: Partial<Contents.IModel> = {
-                name: path.split('\\').at(-1) ?? '',
+                name: path.split('/').at(-1) ?? '',
                 path: path,
-                type: isOldPathMeetsFilename ? 'file' : 'directory',
+                type: isOldPathMeetsFilename ? FILE : DIRECTORY,
                 writable: true,
                 created: now,
                 last_modified: now,
@@ -741,9 +743,9 @@ export class GCSDrive implements Contents.IDrive {
             };
 
             const newModelObject: Partial<Contents.IModel> = {
-                name: newLocalPath.split('\\').at(-1) ?? '',
+                name: newLocalPath.split('/').at(-1) ?? '',
                 path: newLocalPath,
-                type: isNewPathMeetsFilename ? 'file' : 'directory',
+                type: isNewPathMeetsFilename ? FILE : DIRECTORY,
                 writable: true,
                 created: now,
                 last_modified: now,
@@ -753,13 +755,13 @@ export class GCSDrive implements Contents.IDrive {
 
             // Emitting the Signal ( If file is opened, JupyterLab updates name in the editor. )
             this._fileChanged.emit({
-              type: 'rename',
+              type: RENAME_SIGNAL,
               oldValue: oldModelObject,
               newValue: newModelObject
             });
 
             return {
-              type: 'file',
+              type: FILE,
               path: newLocalPath,
               name: newLocalPath.split('\\').at(-1) ?? '',
               format: options?.format ?? 'text',
@@ -771,7 +773,7 @@ export class GCSDrive implements Contents.IDrive {
             };
           } else {
             return {
-              type: 'directory',
+              type: DIRECTORY,
               path:
                 newLocalPath +
                 (newLocalPath.endsWith('/')
@@ -788,7 +790,7 @@ export class GCSDrive implements Contents.IDrive {
           }
         } else {
           await showDialog({
-            title: 'Rename Error',
+            title: RENAME_ERROR_TITLE,
             body: response.error,
             buttons: [Dialog.okButton()]
           });
