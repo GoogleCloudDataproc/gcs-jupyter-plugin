@@ -1,4 +1,5 @@
 import { requestAPI } from '../handler';
+import { LOG_ENDPOINT } from './const';
 
 /**
  * Enum of python log levels.
@@ -65,7 +66,7 @@ export class CloudStorageLoggingService {
     message: string,
     level: LOG_LEVEL = LOG_LEVEL.INFO
   ): Promise<string> {
-    const resp = await requestAPI('log', {
+    const resp = await requestAPI(LOG_ENDPOINT, {
       body: JSON.stringify({
         message: message,
         level: level

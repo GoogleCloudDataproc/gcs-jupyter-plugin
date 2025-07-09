@@ -29,22 +29,19 @@ export async function requestAPI<T>(
 
   const rawResponseText = await response.text();
   const contentType = response.headers.get('Content-Type');
-  let data: any; // data can be string or object
 
-  if (contentType?.includes('application/json')) {
-    try {
-      data = JSON.parse(rawResponseText);
-    } catch (parseError) {
-      data = rawResponseText;
+  if(response.ok){
+    if (contentType?.includes('application/json')) {
+      try {
+        return JSON.parse(rawResponseText);
+      } catch (parseError) {
+        console.warn('Parse Error Occured : ' + parseError)
+        return rawResponseText as any;
+      }
+    } else {
+      return rawResponseText as any;
     }
   } else {
-    // For all other content types (like text/plain , octet-stream), read as raw text
-    data = rawResponseText;
+    throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
   }
-
-  if (!response.ok) {
-    throw new ServerConnection.ResponseError(response, data.message ?? data);
-  }
-
-  return data;
 }
