@@ -2,15 +2,24 @@ import { expect, test } from '@jupyterlab/galata';
 
 const timeout = 5 * 60 * 1000;
 const gcsTab = 'Google Cloud Storage';
-const testBucket = 'test_am_bucket'; // Bucket name should be changed once created in kokoro project
+const testBucket = 'acn-gcs-test-bucket';
 const folderName = 'testFolder';
 const fileName = 'testFile.txt';
+
+const waitForProgressBarToDisappear = async page => {
+  await page
+    .locator(
+      "//*[@id='GCS-bucket-tab']//div[contains(@class, 'lm-Widget') and contains(@class, 'lm-mod-hidden')]"
+    )
+    .waitFor({ state: 'attached' });
+  await page.waitForTimeout(2000);
+};
 
 const openGCSTab = async page => {
   const tab = page.getByRole('tab', { name: gcsTab });
   if (await tab.isVisible()) {
     await tab.click();
-    await page.waitForTimeout(20000);
+    await waitForProgressBarToDisappear(page);
     return true;
   }
   console.warn('GCS tab is not available');
@@ -22,7 +31,21 @@ const openBucket = async (page, bucketName = testBucket) => {
     page.getByRole('listitem', { name: `Name: ${bucketName}` })
   ).toBeVisible();
   await page.getByRole('listitem', { name: `Name: ${bucketName}` }).dblclick();
-  await page.waitForTimeout(20000);
+  await waitForProgressBarToDisappear(page);
+};
+
+const resetBucket = async page => {
+  while (true) {
+    const listItems = page.getByRole('listitem');
+
+    if ((await listItems.count()) === 0) break;
+
+    const item = listItems.nth(0);
+    await item.click({ button: 'right' });
+    await page.getByText('Delete', { exact: true }).click();
+    await page.getByRole('button', { name: 'Delete' }).click();
+    await waitForProgressBarToDisappear(page);
+  }
 };
 
 test.describe('GCS tests', () => {
@@ -37,15 +60,17 @@ test.describe('GCS tests', () => {
       await expect(
         page.getByRole('button', { name: 'File Upload' })
       ).toBeDisabled();
+      await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
+
+      // Verify search box is visible on cliking toggle file filer button
+      await page.getByRole('button', { name: 'Toggle File Filter' }).click();
+      await expect(page.getByRole('searchbox')).toBeVisible();
+
+      // Verify search box is not visible on cliking toggle file filer button again
+      await page.getByRole('button', { name: 'Toggle File Filter' }).click();
+      await expect(page.getByRole('searchbox')).not.toBeVisible();
       await expect(
-        page
-          .locator('[id="dataproc-jupyter-plugin\\:gcsBrowser"]')
-          .getByText('Name')
-      ).toBeVisible();
-      await expect(
-        page
-          .locator('[id="dataproc-jupyter-plugin\\:gcsBrowser"]')
-          .getByText('Modified', { exact: true })
+        page.locator('[id="gcs-jupyter-plugin:gcsBrowser"]').getByText('Name')
       ).toBeVisible();
     }
   });
@@ -123,7 +148,9 @@ test.describe('GCS tests', () => {
 
         // Create a folder
         await page.getByRole('button', { name: 'New Folder' }).click();
-        await page.waitForTimeout(30000);
+
+        await waitForProgressBarToDisappear(page);
+
         const newFolder = page.getByRole('listitem', {
           name: 'Name: UntitledFolder'
         });
@@ -135,7 +162,7 @@ test.describe('GCS tests', () => {
           .getByRole('region', { name: 'side panel content' })
           .getByRole('textbox')
           .press('Enter');
-        await page.waitForTimeout(20000);
+        await waitForProgressBarToDisappear(page);
         await expect(
           page.getByRole('listitem', { name: `Name: ${folderName}` })
         ).toBeVisible();
@@ -146,18 +173,19 @@ test.describe('GCS tests', () => {
           .click({ button: 'right' });
         await page.getByText('Delete', { exact: true }).click();
         await page.getByRole('button', { name: 'Delete' }).click();
-        await page.waitForTimeout(20000);
+        await waitForProgressBarToDisappear(page);
+        await page.waitForTimeout(5000);
         await expect(
           page.getByRole('listitem', { name: `Name: ${folderName}` })
         ).not.toBeVisible();
 
-        // Right click to create and delete a folder
+        // Right-click to create and delete folder
         await page
           .locator("//ul[@class='jp-DirListing-content']")
           .first()
           .click({ button: 'right' });
         await page.getByText('New Folder', { exact: true }).click();
-        await page.waitForTimeout(20000);
+        await waitForProgressBarToDisappear(page);
         await expect(
           page.getByRole('listitem', { name: 'Name: UntitledFolder' })
         ).toBeVisible();
@@ -178,8 +206,8 @@ test.describe('GCS tests', () => {
         expect(page.getByRole('button', { name: 'Delete' })).toBeVisible();
 
         await page.getByRole('button', { name: 'Delete' }).click();
-        await page.waitForTimeout(30000);
-
+        await waitForProgressBarToDisappear(page);
+        await page.waitForTimeout(5000);
         await expect(
           page.getByRole('listitem', { name: 'Name: UntitledFolder' })
         ).not.toBeVisible();
@@ -205,7 +233,7 @@ test.describe('GCS tests', () => {
           .first()
           .click({ button: 'right' });
         await page.getByText('New File', { exact: true }).click();
-        await page.waitForTimeout(30000);
+        await waitForProgressBarToDisappear(page);
         const newFile = page.getByRole('listitem', {
           name: 'Name: untitled.txt'
         });
@@ -217,7 +245,7 @@ test.describe('GCS tests', () => {
           .getByRole('region', { name: 'side panel content' })
           .getByRole('textbox')
           .press('Enter');
-        await page.waitForTimeout(20000);
+        await waitForProgressBarToDisappear(page);
         await expect(
           page.getByRole('listitem', { name: `Name: ${fileName}` })
         ).toBeVisible();
@@ -228,7 +256,8 @@ test.describe('GCS tests', () => {
           .click({ button: 'right' });
         await page.getByText('Delete', { exact: true }).click();
         await page.getByRole('button', { name: 'Delete' }).click();
-        await page.waitForTimeout(20000);
+        await waitForProgressBarToDisappear(page);
+        await page.waitForTimeout(5000);
         await expect(
           page.getByRole('listitem', { name: `Name: ${fileName}` })
         ).not.toBeVisible();
@@ -254,7 +283,7 @@ test.describe('GCS tests', () => {
           .first()
           .click({ button: 'right' });
         await page.getByText('New File', { exact: true }).click();
-        await page.waitForTimeout(30000);
+        await waitForProgressBarToDisappear(page);
         const newFile = page.getByRole('listitem', {
           name: 'Name: untitled.txt'
         });
@@ -262,10 +291,14 @@ test.describe('GCS tests', () => {
           .getByRole('region', { name: 'side panel content' })
           .getByRole('textbox')
           .press('Enter');
-        await page.waitForTimeout(5000);
+        await waitForProgressBarToDisappear(page);
         await expect(newFile).toBeVisible();
         await newFile.dblclick();
-        await page.waitForTimeout(20000);
+        await page
+          .locator('div.lm-Widget.jp-Spinner')
+          .waitFor({ state: 'detached' });
+        await page.waitForTimeout(2000);
+
         await page
           .getByLabel('notebook content')
           .getByRole('textbox')
@@ -274,11 +307,13 @@ test.describe('GCS tests', () => {
           .getByLabel('notebook content')
           .getByRole('textbox')
           .press('Control+s');
-        await page.waitForTimeout(30000);
+        await page.waitForTimeout(15000);
         await page.getByTitle('Close untitled.txt').click();
-        await page.waitForTimeout(5000);
+        await page.waitForTimeout(2000);
         await newFile.dblclick();
-        await page.waitForTimeout(20000);
+        await page
+          .locator('div.lm-Widget.jp-Spinner')
+          .waitFor({ state: 'detached' });
 
         const content = await page
           .getByLabel('notebook content')
@@ -286,7 +321,7 @@ test.describe('GCS tests', () => {
           .textContent();
         expect(content).toBe('Test file edit validation');
         await page.getByTitle('Close untitled.txt').click();
-        await page.waitForTimeout(5000);
+        await page.waitForTimeout(2000);
 
         // Delete a file
         await page
@@ -294,7 +329,8 @@ test.describe('GCS tests', () => {
           .click({ button: 'right' });
         await page.getByText('Delete', { exact: true }).click();
         await page.getByRole('button', { name: 'Delete' }).click();
-        await page.waitForTimeout(20000);
+        await waitForProgressBarToDisappear(page);
+        await page.waitForTimeout(3000);
         await expect(
           page.getByRole('listitem', { name: `Name: untitled.txt` })
         ).not.toBeVisible();
@@ -320,7 +356,7 @@ test.describe('GCS tests', () => {
           .first()
           .click({ button: 'right' });
         await page.getByText('New File', { exact: true }).click();
-        await page.waitForTimeout(30000);
+        await waitForProgressBarToDisappear(page);
         const newFile = page.getByRole('listitem', {
           name: 'Name: untitled.txt'
         });
@@ -331,7 +367,7 @@ test.describe('GCS tests', () => {
         await page.waitForTimeout(5000);
         await expect(newFile).toBeVisible();
         await newFile.dblclick();
-        await page.waitForTimeout(20000);
+
         // Wait till the file opened
         await page
           .locator("//div[@class='jp-SpinnerContent']")
@@ -339,7 +375,7 @@ test.describe('GCS tests', () => {
         await page
           .getByLabel('notebook content')
           .getByRole('textbox')
-          .fill('Test file doscard validation');
+          .fill('Test file discard validation');
         await page.getByTitle('Close untitled.txt').click();
         expect(page.getByText('Save your work')).toBeVisible();
         expect(
@@ -350,6 +386,7 @@ test.describe('GCS tests', () => {
         await page.getByRole('button', { name: 'Discard' }).click();
         await page.waitForTimeout(5000);
         await newFile.dblclick();
+
         // Wait till the file opened
         await page
           .locator("//div[@class='jp-SpinnerContent']")
@@ -359,7 +396,7 @@ test.describe('GCS tests', () => {
           .getByLabel('notebook content')
           .getByRole('textbox')
           .textContent();
-        expect(content).not.toBe('Test file doscard validation');
+        expect(content).not.toBe('Test file discard validation');
         await page.getByTitle('Close untitled.txt').click();
         await page.waitForTimeout(5000);
 
@@ -369,12 +406,28 @@ test.describe('GCS tests', () => {
           .click({ button: 'right' });
         await page.getByText('Delete', { exact: true }).click();
         await page.getByRole('button', { name: 'Delete' }).click();
-        await page.waitForTimeout(20000);
+        await waitForProgressBarToDisappear(page);
+        await page.waitForTimeout(3000);
         await expect(
           page.getByRole('listitem', { name: `Name: untitled.txt` })
         ).not.toBeVisible();
       } else {
         console.log('Test bucket is not present');
+      }
+    }
+  });
+
+  test('Clean up bucket data', async ({ page }) => {
+    test.setTimeout(timeout);
+    if (await openGCSTab(page)) {
+      const bucket = page.getByRole('listitem', {
+        name: `Name: ${testBucket}`
+      });
+      const visible = await bucket.isVisible();
+      if (visible) {
+        await openBucket(page);
+
+        await resetBucket(page);
       }
     }
   });
