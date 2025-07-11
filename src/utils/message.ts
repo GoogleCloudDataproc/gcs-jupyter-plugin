@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ export const UPLOAD_ERROR_TITLE = 'Upload Error'
 export const BUCKET_LEVEL_UPLOAD_MESSAGE = 'Uploading files at bucket level is not allowed'
 
 export const FILE_EXIST_TITLE = 'Upload file'
-export const FILE_OVERRIDE_MESSAGE = ' already exists. Do you want to overwrite?' // File Name added as prefix
-export const OVERRIDE_BUTTON_TEXT = 'Overwrite'
+export const FILE_OVERWRITE_MESSAGE = ' already exists. Do you want to overwrite?' // File Name added as prefix
+export const OVERWRITE_BUTTON_TEXT = 'Overwrite'
 
 /** Folder Creation */
 export const FOLDER_CREATION_ERROR_TITLE = 'Create Folder Error'

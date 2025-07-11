@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,6 @@ from gcs_jupyter_plugin.controllers.gcs import (
     DeleteFileController,
     RenameFileController,
     DownloadFileController,
-    GCSHealthController,
 )
 
 
@@ -78,7 +77,13 @@ class LogHandler(APIHandler):
         log_body = self.get_json_body()
         logger.log(log_body["level"], log_body["message"])
         self.finish({"status": "OK"})
-
+        
+class HealthCheckHandler(APIHandler):
+    @tornado.web.authenticated
+    async def get(self):
+        # This endpoint verifies basic server accessibility and whether the Jupyter server has been updated and restarted.
+        # It's expected to succeed if the server is reachable and running the latest components; no specific exceptions are handled here.
+        self.finish({"status": "OK"})
 
 def setup_handlers(web_app):
     host_pattern = ".*$"
@@ -93,6 +98,7 @@ def setup_handlers(web_app):
         "credentials": CredentialsHandler,
         "log": LogHandler,
         "login": LoginHandler,
+        "health": HealthCheckHandler,
         "api/storage/listBuckets": ListBucketsController,
         "api/storage/listFiles": ListFilesController,
         "api/storage/loadFile": LoadFileController,
@@ -101,7 +107,6 @@ def setup_handlers(web_app):
         "api/storage/deleteFile": DeleteFileController,
         "api/storage/renameFile": RenameFileController,
         "api/storage/downloadFile": DownloadFileController,
-        "api/storage/health": GCSHealthController,
     }
     handlers = [(full_path(name), handler) for name, handler in handlers_map.items()]
     web_app.add_handlers(host_pattern, handlers)

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,8 +36,8 @@ import {
   iconGCSUploadDark,
   iconSigninGoogle
 } from '../utils/icon';
-import { GCS_PLUGIN_TITLE , NEW_FOLDER_ID , FILE_UPLOAD_ID, REFRESH_ID , TOGGLE_FILE_FILTER_ID } from '../utils/const';
-import { BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_UPLOAD_MESSAGE, FILE_EXIST_TITLE, FILE_OVERRIDE_MESSAGE, FOLDER_CREATION_ERROR_TITLE, GCLOUD_CONFIG_ERROR, OVERRIDE_BUTTON_TEXT, UPLOAD_ERROR_TITLE } from '../utils/message';
+import { GCS_PLUGIN_TITLE , NEW_FOLDER , FILE_UPLOAD, REFRESH , TOGGLE_FILE_FILTER } from '../utils/const';
+import { BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_UPLOAD_MESSAGE, FILE_EXIST_TITLE, FILE_OVERWRITE_MESSAGE, FOLDER_CREATION_ERROR_TITLE, GCLOUD_CONFIG_ERROR, OVERWRITE_BUTTON_TEXT, UPLOAD_ERROR_TITLE } from '../utils/message';
 
 export class GcsBrowserWidget extends Widget {
   private readonly _themeManager: IThemeManager;
@@ -118,10 +118,10 @@ export class GcsBrowserWidget extends Widget {
     this.newFolder.enabled = false;
     this.gcsUpload.enabled = false;
 
-    this._browser.toolbar.addItem(NEW_FOLDER_ID, this.newFolder);
-    this._browser.toolbar.addItem(FILE_UPLOAD_ID, this.gcsUpload);
-    this._browser.toolbar.addItem(REFRESH_ID, this.refreshButton);
-    this._browser.toolbar.addItem(TOGGLE_FILE_FILTER_ID, this.toggleFileFilter);
+    this._browser.toolbar.addItem(NEW_FOLDER, this.newFolder);
+    this._browser.toolbar.addItem(FILE_UPLOAD, this.gcsUpload);
+    this._browser.toolbar.addItem(REFRESH, this.refreshButton);
+    this._browser.toolbar.addItem(TOGGLE_FILE_FILTER, this.toggleFileFilter);
 
     this._themeManager.themeChanged.connect(this.onThemeChanged, this);
     this.onThemeChanged();
@@ -138,7 +138,7 @@ export class GcsBrowserWidget extends Widget {
       icon: isLight ? iconGCSNewFolder : iconGCSNewFolderDark,
       className: 'icon-white',
       onClick: this.handleFolderCreation,
-      tooltip: NEW_FOLDER_ID
+      tooltip: NEW_FOLDER
     });
   }
 
@@ -147,7 +147,7 @@ export class GcsBrowserWidget extends Widget {
       icon: isLight ? iconGCSUpload : iconGCSUploadDark,
       className: 'icon-white jp-UploadIcon',
       onClick: this.onUploadButtonClick,
-      tooltip: FILE_UPLOAD_ID
+      tooltip: FILE_UPLOAD
     });
   }
 
@@ -158,7 +158,7 @@ export class GcsBrowserWidget extends Widget {
       onClick: () => {
         void this.onRefreshButtonClick();
       },
-      tooltip: REFRESH_ID
+      tooltip: REFRESH
     });
   }
 
@@ -169,7 +169,7 @@ export class GcsBrowserWidget extends Widget {
       onClick: () => {
         this._browser.showFileFilter = !this._browser.showFileFilter;
       },
-      tooltip: TOGGLE_FILE_FILTER_ID
+      tooltip: TOGGLE_FILE_FILTER
     });
   }
 
@@ -210,10 +210,10 @@ export class GcsBrowserWidget extends Widget {
 
     // Add the new buttons back to the toolbar using their original IDs
     if (typeof browserToolbar.addItem === 'function') {
-      browserToolbar.addItem(NEW_FOLDER_ID, this.newFolder);
-      browserToolbar.addItem(FILE_UPLOAD_ID, this.gcsUpload);
-      browserToolbar.addItem(REFRESH_ID, this.refreshButton);
-      browserToolbar.addItem(TOGGLE_FILE_FILTER_ID, this.toggleFileFilter);
+      browserToolbar.addItem(NEW_FOLDER, this.newFolder);
+      browserToolbar.addItem(FILE_UPLOAD, this.gcsUpload);
+      browserToolbar.addItem(REFRESH, this.refreshButton);
+      browserToolbar.addItem(TOGGLE_FILE_FILTER, this.toggleFileFilter);
     } else {
         console.error("Toolbar addItem method not found at runtime. Cannot re-add buttons.");
     }
@@ -278,10 +278,10 @@ export class GcsBrowserWidget extends Widget {
           if (content.files && content.files.length > 0) {
             const result = await showDialog({
               title: FILE_EXIST_TITLE,
-              body: file.name + FILE_OVERRIDE_MESSAGE,
+              body: file.name + FILE_OVERWRITE_MESSAGE,
               buttons: [
                 Dialog.cancelButton(),
-                Dialog.okButton({ label: OVERRIDE_BUTTON_TEXT })
+                Dialog.okButton({ label: OVERWRITE_BUTTON_TEXT })
               ]
             });
 

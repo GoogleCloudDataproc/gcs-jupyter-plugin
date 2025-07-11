@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ export const STATUS_SUCCESS = 'SUCCEEDED';
 export const CREDENTIAL_ENDPOINT = "credentials"
 export const LOG_ENDPOINT = "log";
 export const LOGIN_ENDPOINT = "login"
+export const HEALTH_ENDPOINT = "health"
 export const LIST_BUCKETS_ENDPOINT = "api/storage/listBuckets"
 export const LIST_FILES_ENDPOINT = "api/storage/listFiles"
 export const LOAD_FILE_ENDPOINT = "api/storage/loadFile"
@@ -39,13 +40,12 @@ export const SAVE_ENDPOINT = "api/storage/saveFile"
 export const DELETE_ENDPOINT = "api/storage/deleteFile"
 export const RENAME_ENDPOINT = "api/storage/renameFile"
 export const DOWNLOAD_ENDPOINT = "api/storage/downloadFile"
-export const HEALTH_ENDPOINT = "api/storage/health"
 
 /** toolbar items ( Used in Name and tooltip ) */
-export const NEW_FOLDER_ID = 'New Folder';
-export const FILE_UPLOAD_ID = 'File Upload';
-export const REFRESH_ID = 'Refresh';
-export const TOGGLE_FILE_FILTER_ID = 'Toggle File Filter';
+export const NEW_FOLDER = 'New Folder';
+export const FILE_UPLOAD = 'File Upload';
+export const REFRESH = 'Refresh';
+export const TOGGLE_FILE_FILTER = 'Toggle File Filter';
 
 /** folder creation */
 export const DIRECTORY = 'directory'

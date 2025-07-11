@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,21 +21,6 @@ from gcs_jupyter_plugin import credentials
 from gcs_jupyter_plugin.services import gcs
 
 from gcs_jupyter_plugin.commons.constants import MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE
-
-
-class GCSHealthController(APIHandler):
-    @tornado.web.authenticated
-    async def get(self):
-        try:
-            self.set_status(200)
-            self.finish(json.dumps({
-                'status': 'ok',
-                'message': 'GCS plugin server extension is active.'
-            }))
-        except Exception as e:
-            self.log.error("Health Check for Server is failed: %s", str(e))
-            self.set_status(500)
-            self.finish(json.dumps({'status': 'error', 'message': 'An internal error occurred during health check.'}))
 
 class ListBucketsController(APIHandler):
     @tornado.web.authenticated
