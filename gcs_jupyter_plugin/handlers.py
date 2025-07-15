@@ -78,12 +78,14 @@ class LogHandler(APIHandler):
         logger.log(log_body["level"], log_body["message"])
         self.finish({"status": "OK"})
         
+        
 class HealthCheckHandler(APIHandler):
     @tornado.web.authenticated
     async def get(self):
         # This endpoint verifies basic server accessibility and whether the Jupyter server has been updated and restarted.
         # It's expected to succeed if the server is reachable and running the latest components; no specific exceptions are handled here.
         self.finish({"status": "OK"})
+
 
 def setup_handlers(web_app):
     host_pattern = ".*$"

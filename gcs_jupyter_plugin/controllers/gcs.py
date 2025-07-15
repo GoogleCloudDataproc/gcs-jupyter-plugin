@@ -22,6 +22,7 @@ from gcs_jupyter_plugin.services import gcs
 
 from gcs_jupyter_plugin.commons.constants import MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE
 
+
 class ListBucketsController(APIHandler):
     @tornado.web.authenticated
     async def get(self):
