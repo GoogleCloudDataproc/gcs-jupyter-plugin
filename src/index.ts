@@ -62,13 +62,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const isLightTheme = themeManager.theme
         ? themeManager.isLight(themeManager.theme)
         : true;
-      if (panelGcs) {
-        if (isLightTheme) {
-            panelGcs.title.icon = iconStorage;
-        } else {
-            panelGcs.title.icon = iconStorageDark;
-        }
-      }
+      panelGcs.title.icon = isLightTheme ? iconStorage : iconStorageDark
     };
 
     const gcsDrive = new GCSDrive(app);
@@ -103,7 +97,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         try {
           const url = HEALTH_ENDPOINT;
-          await requestAPI(url) as any;
+          await requestAPI(url);
         } catch (error) {
           console.error('GCS backend health check failed:', error);
           await showDialog({

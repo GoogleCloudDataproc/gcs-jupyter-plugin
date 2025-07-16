@@ -47,18 +47,19 @@ export async function requestAPI<T>(
   const rawResponseText = await response.text();
   const contentType = response.headers.get('Content-Type');
 
-  if(response.ok){
-    if (contentType?.includes('application/json')) {
-      try {
-        return JSON.parse(rawResponseText);
-      } catch (parseError) {
-        console.warn('Parse Error Occured : ' + parseError)
-        return rawResponseText as any;
-      }
-    } else {
-      return rawResponseText as any;
-    }
-  } else {
+  if (!response.ok) {
     throw new ServerConnection.ResponseError(response, `API request failed with status ${response.status}: ${response.statusText}`);
+  }
+
+  if (!contentType?.includes('application/json')) {
+    return rawResponseText as any;
+  }
+
+  // If content type is JSON, attempting to parse it
+  try {
+    return JSON.parse(rawResponseText);
+  } catch (parseError) {
+    console.warn('Parse Error Occurred: ' + parseError);
+    return rawResponseText as any;
   }
 }

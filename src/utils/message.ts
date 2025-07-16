@@ -31,7 +31,7 @@ export const FILE_OVERWRITE_MESSAGE = ' already exists. Do you want to overwrite
 export const OVERWRITE_BUTTON_TEXT = 'Overwrite'
 
 /** Folder Creation */
-export const FOLDER_CREATION_ERROR_TITLE = 'Create Folder Error'
+export const FOLDER_CREATION_ERROR_TITLE = 'Error creating folder'
 export const BUCKET_LEVEL_FOLDER_CREATION_MESSAGE = 'Folders cannot be created outside of a bucket.'
 
 /** File Creation */
@@ -39,15 +39,21 @@ export const FILE_CREATION_ERROR_TITLE = 'Error Creating File'
 export const BUCKET_LEVEL_FILE_CREATION_MESSAGE = 'Files cannot be created outside of a bucket.'
 
 /** Notebook Creation */
-export const NOTEBOOK_CREATION_ERROR_TITLE = 'Create Notebook Error'
+export const NOTEBOOK_CREATION_ERROR_TITLE = 'Error Creating Notebook'
 export const BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE = 'Notebooks have to be created inside a bucket. Open a bucket in the Cloud Storage Browser to create a new notebook.'
 export const NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE = 'Cloud Storage Browser has the file system context. To create a notebook in your local file system, switch the file system context by selecting a folder in File Browser.'
+
+/** Object Creation */
+export const OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE = 'Cannot create new objects in the root directory.'
 
 /** Unsupported Type Creation */
 export const UNSUPPORTED_CREATE_TITLE = 'Unsupported Type Error'
 export const UNSUPPORTED_CREATE_ERROR = 'Unsupported creation type : ' // Type added as suffix 
 
 /** file operation */
+
+/** Common */
+export const NO_DATA_PROVIDED_ERROR = 'No data provided for this operation.'
 
 /** deletion */
 export const DELETION_ERROR_TITLE = 'Deletion Error'
