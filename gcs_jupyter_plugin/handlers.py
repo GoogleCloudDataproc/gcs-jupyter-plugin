@@ -1,3 +1,17 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import subprocess
 
@@ -63,6 +77,14 @@ class LogHandler(APIHandler):
         log_body = self.get_json_body()
         logger.log(log_body["level"], log_body["message"])
         self.finish({"status": "OK"})
+        
+        
+class HealthCheckHandler(APIHandler):
+    @tornado.web.authenticated
+    async def get(self):
+        # This endpoint verifies basic server accessibility and whether the Jupyter server has been updated and restarted.
+        # It's expected to succeed if the server is reachable and running the latest components; no specific exceptions are handled here.
+        self.finish({"status": "OK"})
 
 
 def setup_handlers(web_app):
@@ -78,6 +100,7 @@ def setup_handlers(web_app):
         "credentials": CredentialsHandler,
         "log": LogHandler,
         "login": LoginHandler,
+        "health": HealthCheckHandler,
         "api/storage/listBuckets": ListBucketsController,
         "api/storage/listFiles": ListFilesController,
         "api/storage/loadFile": LoadFileController,

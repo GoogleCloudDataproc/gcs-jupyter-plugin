@@ -19,7 +19,7 @@ import { requestAPI } from '../handler';
 import { ToastOptions, toast } from 'react-toastify';
 
 import { CloudStorageLoggingService } from './loggingService';
-import { STATUS_SUCCESS } from './const';
+import { CREDENTIAL_ENDPOINT, LOGIN_ENDPOINT, STATUS_SUCCESS } from './const';
 
 export const toastifyCustomStyle: ToastOptions<Record<string, never>> = {
   hideProgressBar: true,
@@ -38,7 +38,7 @@ export interface IAuthCredentials {
 
 export const authApi = async (): Promise<IAuthCredentials | undefined> => {
   try {
-    const data = await requestAPI('credentials' , {
+    const data = await requestAPI(CREDENTIAL_ENDPOINT , {
       method: 'POST'
     });
     if (typeof data === 'object' && data !== null) {
@@ -59,7 +59,7 @@ export const authApi = async (): Promise<IAuthCredentials | undefined> => {
 export const login = async (
   setLoginError: React.Dispatch<React.SetStateAction<boolean>>
 ) => {
-  const data = await requestAPI('login', {
+  const data = await requestAPI(LOGIN_ENDPOINT, {
     method: 'POST'
   });
   if (typeof data === 'object' && data !== null) {

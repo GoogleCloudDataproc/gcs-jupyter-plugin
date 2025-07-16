@@ -17,6 +17,7 @@
 
 import { requestAPI } from '../handler';
 import { showDialog, Dialog } from '@jupyterlab/apputils';
+import { CREATE_FOLDER_ENDPOINT, DELETE_ENDPOINT, LIST_BUCKETS_ENDPOINT, LIST_FILES_ENDPOINT, LOAD_FILE_ENDPOINT, RENAME_ENDPOINT, SAVE_ENDPOINT } from '../utils/const';
 
 export class GcsService {
   /**
@@ -52,8 +53,12 @@ export class GcsService {
    * @see https://cloud.google.com/storage/docs/listing-buckets#rest-list-buckets
    */
   static async listBuckets() {
-    const data = (await requestAPI('api/storage/listBuckets')) as any;
-    return data;
+    try{
+      const data = (await requestAPI(LIST_BUCKETS_ENDPOINT)) as any;
+      return data;
+    } catch (error: any) {
+      console.error(error?.message ?? 'Error fetching Buckets');
+    }
   }
 
   /**
@@ -67,7 +72,7 @@ export class GcsService {
     prefix: string;
     bucket: string;
   }) {
-    const url = `api/storage/listFiles?prefix=${encodeURIComponent(prefix)}&bucket=${encodeURIComponent(bucket)}`;
+    const url = `${LIST_FILES_ENDPOINT}?prefix=${encodeURIComponent(prefix)}&bucket=${encodeURIComponent(bucket)}`;
 
     const data = (await requestAPI(url)) as any;
 
@@ -88,7 +93,7 @@ export class GcsService {
     format: 'text' | 'json' | 'base64';
   }): Promise<string> {
 
-    const data = await requestAPI('api/storage/loadFile', {
+    const data = await requestAPI(LOAD_FILE_ENDPOINT, {
       method: 'POST',
       body: JSON.stringify({
         bucket,
@@ -113,7 +118,7 @@ export class GcsService {
     path: string;
     folderName: string;
   }) {
-    const data = await requestAPI('api/storage/createFolder', {
+    const data = await requestAPI(CREATE_FOLDER_ENDPOINT, {
       method: 'POST',
       body: JSON.stringify({
         bucket,
@@ -147,7 +152,7 @@ export class GcsService {
       formData.append('contents', contents);
       formData.append('upload', String(upload));
 
-      const response = await requestAPI('api/storage/saveFile', {
+      const response = await requestAPI(SAVE_ENDPOINT, {
         method: 'POST',
         body: formData
       });
@@ -165,7 +170,7 @@ export class GcsService {
   static async deleteFile({ bucket, path }: { bucket: string; path: string }) {
     try {
       const response: { status?: number; error?: string } = await requestAPI(
-        'api/storage/deleteFile?bucket=' + encodeURIComponent(bucket) + '&path=' + encodeURIComponent(path),
+        DELETE_ENDPOINT + '?bucket=' + encodeURIComponent(bucket) + '&path=' + encodeURIComponent(path),
         {
           method: 'DELETE'
         }
@@ -198,7 +203,7 @@ export class GcsService {
   }) {
     try {
       const response: { status?: number; error?: string } = await requestAPI(
-        'api/storage/renameFile',
+        RENAME_ENDPOINT,
         {
           method: 'PATCH',
           body: JSON.stringify({
@@ -238,7 +243,7 @@ export class GcsService {
     format: 'text' | 'json' | 'base64';
   }): Promise<string> {
 
-    const response = await requestAPI('api/storage/loadFile', {
+    const response = await requestAPI(LOAD_FILE_ENDPOINT, {
       method: 'POST',
       body: JSON.stringify({
         bucket,

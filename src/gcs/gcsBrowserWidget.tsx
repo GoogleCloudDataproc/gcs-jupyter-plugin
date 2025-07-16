@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import { Widget, PanelLayout } from '@lumino/widgets';
 import { Dialog, IThemeManager, ToolbarButton, showDialog } from '@jupyterlab/apputils';
 import { FileBrowser } from '@jupyterlab/filebrowser';
@@ -35,6 +36,8 @@ import {
   iconGCSUploadDark,
   iconSigninGoogle
 } from '../utils/icon';
+import { GCS_PLUGIN_TITLE , NEW_FOLDER , FILE_UPLOAD, REFRESH , TOGGLE_FILE_FILTER } from '../utils/const';
+import { BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_UPLOAD_MESSAGE, FILE_EXIST_TITLE, FILE_OVERWRITE_MESSAGE, FOLDER_CREATION_ERROR_TITLE, GCLOUD_CONFIG_ERROR, OVERWRITE_BUTTON_TEXT, UPLOAD_ERROR_TITLE } from '../utils/message';
 
 export class GcsBrowserWidget extends Widget {
   private readonly _themeManager: IThemeManager;
@@ -48,11 +51,6 @@ export class GcsBrowserWidget extends Widget {
   private readonly _browser: FileBrowser;
 
   private readonly _titleWidget: TitleWidget;
-
-  private static readonly NEW_FOLDER_ID = 'New Folder';
-  private static readonly FILE_UPLOAD_ID = 'File Upload';
-  private static readonly REFRESH_ID = 'Refresh';
-  private static readonly TOGGLE_FILE_FILTER_ID = 'Toggle File Filter';
 
   constructor(drive: GCSDrive, browser: FileBrowser, themeManager: IThemeManager) {
     super();
@@ -74,7 +72,7 @@ export class GcsBrowserWidget extends Widget {
     this._browser.node.style.flexGrow = '1';
 
     // Title widget for the GCS Browser
-    this._titleWidget = new TitleWidget('Google Cloud Storage', false);
+    this._titleWidget = new TitleWidget(GCS_PLUGIN_TITLE, false);
     (this.layout as PanelLayout).addWidget(this._titleWidget);
 
     this._progressBarWidget = new ProgressBarWidget();
@@ -120,10 +118,10 @@ export class GcsBrowserWidget extends Widget {
     this.newFolder.enabled = false;
     this.gcsUpload.enabled = false;
 
-    this._browser.toolbar.addItem(GcsBrowserWidget.NEW_FOLDER_ID, this.newFolder);
-    this._browser.toolbar.addItem(GcsBrowserWidget.FILE_UPLOAD_ID, this.gcsUpload);
-    this._browser.toolbar.addItem(GcsBrowserWidget.REFRESH_ID, this.refreshButton);
-    this._browser.toolbar.addItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID, this.toggleFileFilter);
+    this._browser.toolbar.addItem(NEW_FOLDER, this.newFolder);
+    this._browser.toolbar.addItem(FILE_UPLOAD, this.gcsUpload);
+    this._browser.toolbar.addItem(REFRESH, this.refreshButton);
+    this._browser.toolbar.addItem(TOGGLE_FILE_FILTER, this.toggleFileFilter);
 
     this._themeManager.themeChanged.connect(this.onThemeChanged, this);
     this.onThemeChanged();
@@ -140,7 +138,7 @@ export class GcsBrowserWidget extends Widget {
       icon: isLight ? iconGCSNewFolder : iconGCSNewFolderDark,
       className: 'icon-white',
       onClick: this.handleFolderCreation,
-      tooltip: 'New Folder'
+      tooltip: NEW_FOLDER
     });
   }
 
@@ -149,7 +147,7 @@ export class GcsBrowserWidget extends Widget {
       icon: isLight ? iconGCSUpload : iconGCSUploadDark,
       className: 'icon-white jp-UploadIcon',
       onClick: this.onUploadButtonClick,
-      tooltip: 'File Upload'
+      tooltip: FILE_UPLOAD
     });
   }
 
@@ -160,7 +158,7 @@ export class GcsBrowserWidget extends Widget {
       onClick: () => {
         void this.onRefreshButtonClick();
       },
-      tooltip: 'Refresh'
+      tooltip: REFRESH
     });
   }
 
@@ -171,7 +169,7 @@ export class GcsBrowserWidget extends Widget {
       onClick: () => {
         this._browser.showFileFilter = !this._browser.showFileFilter;
       },
-      tooltip: 'Toggle File Filter'
+      tooltip: TOGGLE_FILE_FILTER
     });
   }
 
@@ -186,43 +184,15 @@ export class GcsBrowserWidget extends Widget {
     const browserToolbar: any = this._browser.toolbar;
 
     if (this.newFolder && !this.newFolder.isDisposed) {
-      if (typeof browserToolbar.removeItem === 'function') {
-        browserToolbar.removeItem(GcsBrowserWidget.NEW_FOLDER_ID);
-      } else if (typeof browserToolbar.removeWidget === 'function') {
-        browserToolbar.removeWidget(this.newFolder);
-      } else {
-        console.warn("Toolbar removeItem/removeWidget not found for New Folder. Old button may persist.");
-      }
       this.newFolder.dispose();
     }
     if (this.gcsUpload && !this.gcsUpload.isDisposed) {
-      if (typeof browserToolbar.removeItem === 'function') {
-        browserToolbar.removeItem(GcsBrowserWidget.FILE_UPLOAD_ID);
-      } else if (typeof browserToolbar.removeWidget === 'function') {
-        browserToolbar.removeWidget(this.gcsUpload);
-      } else {
-        console.warn("Toolbar removeItem/removeWidget not found for File Upload. Old button may persist.");
-      }
       this.gcsUpload.dispose();
     }
     if (this.refreshButton && !this.refreshButton.isDisposed) {
-      if (typeof browserToolbar.removeItem === 'function') {
-        browserToolbar.removeItem(GcsBrowserWidget.REFRESH_ID);
-      } else if (typeof browserToolbar.removeWidget === 'function') {
-        browserToolbar.removeWidget(this.refreshButton);
-      } else {
-        console.warn("Toolbar removeItem/removeWidget not found for Refresh. Old button may persist.");
-      }
       this.refreshButton.dispose();
     }
     if (this.toggleFileFilter && !this.toggleFileFilter.isDisposed) {
-      if (typeof browserToolbar.removeItem === 'function') {
-        browserToolbar.removeItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID);
-      } else if (typeof browserToolbar.removeWidget === 'function') {
-        browserToolbar.removeWidget(this.toggleFileFilter);
-      } else {
-        console.warn("Toolbar removeItem/removeWidget not found for Toggle File Filter. Old button may persist.");
-      }
       this.toggleFileFilter.dispose();
     }
 
@@ -240,15 +210,13 @@ export class GcsBrowserWidget extends Widget {
 
     // Add the new buttons back to the toolbar using their original IDs
     if (typeof browserToolbar.addItem === 'function') {
-      browserToolbar.addItem(GcsBrowserWidget.NEW_FOLDER_ID, this.newFolder);
-      browserToolbar.addItem(GcsBrowserWidget.FILE_UPLOAD_ID, this.gcsUpload);
-      browserToolbar.addItem(GcsBrowserWidget.REFRESH_ID, this.refreshButton);
-      browserToolbar.addItem(GcsBrowserWidget.TOGGLE_FILE_FILTER_ID, this.toggleFileFilter);
+      browserToolbar.addItem(NEW_FOLDER, this.newFolder);
+      browserToolbar.addItem(FILE_UPLOAD, this.gcsUpload);
+      browserToolbar.addItem(REFRESH, this.refreshButton);
+      browserToolbar.addItem(TOGGLE_FILE_FILTER, this.toggleFileFilter);
     } else {
         console.error("Toolbar addItem method not found at runtime. Cannot re-add buttons.");
     }
-
-    console.log('Theme changed:', isLight ? 'Light' : 'Dark');
   };
 
   // Function to trigger file input dialog when the upload button is clicked
@@ -257,8 +225,8 @@ export class GcsBrowserWidget extends Widget {
       this.fileInput.click();
     } else {
       showDialog({
-        title: 'Upload Error',
-        body: 'Uploading files at bucket level is not allowed',
+        title: UPLOAD_ERROR_TITLE,
+        body: BUCKET_LEVEL_UPLOAD_MESSAGE,
         buttons: [Dialog.okButton()]
       });
     }
@@ -269,8 +237,8 @@ export class GcsBrowserWidget extends Widget {
       this._browser.createNewDirectory();
     } else {
       showDialog({
-        title: 'Create Folder Error',
-        body: 'Folders cannot be created outside of a bucket.',
+        title: FOLDER_CREATION_ERROR_TITLE,
+        body: BUCKET_LEVEL_FOLDER_CREATION_MESSAGE,
         buttons: [Dialog.okButton()]
       });
     }
@@ -309,11 +277,11 @@ export class GcsBrowserWidget extends Widget {
 
           if (content.files && content.files.length > 0) {
             const result = await showDialog({
-              title: 'Upload files',
-              body: file.name + ' already exists. Do you want to overwrite?',
+              title: FILE_EXIST_TITLE,
+              body: file.name + FILE_OVERWRITE_MESSAGE,
               buttons: [
                 Dialog.cancelButton(),
-                Dialog.okButton({ label: 'Overwrite' })
+                Dialog.okButton({ label: OVERWRITE_BUTTON_TEXT })
               ]
             });
 
@@ -377,7 +345,7 @@ export class GcsBrowserWidget extends Widget {
         if (credentials.config_error === 1) {
           // Config error
           errorMessageNode.textContent =
-            'Please configure gcloud with account, project-id and region.';
+            GCLOUD_CONFIG_ERROR;
           this.node.appendChild(errorMessageNode);
           return;
         }
@@ -454,9 +422,12 @@ export class GcsBrowserWidget extends Widget {
   }
 
   private readonly onPathChanged = () => {
-    // The below 2 lines of code is added as a workaround for switching to corresponding filebrowser context
-    this._browser.showFileFilter = false;
-    this._browser.showFileFilter = true;
+
+    // The below 2 lines of code is added as a workaround for resetting the file filter
+    if(this._browser.showFileFilter){
+      this._browser.showFileFilter = false;
+      this._browser.showFileFilter = true;
+    } 
 
     const currentPath = this._browser.model.path.split(':')[1];
     // Check if the current path is the root (empty string or just '/')
