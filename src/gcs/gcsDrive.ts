@@ -26,7 +26,7 @@ import mime from 'mime-types';
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { GcsBrowserWidget } from './gcsBrowserWidget';
 import { DELETE_SIGNAL, DIRECTORY, FILE, GCS_PLUGIN_TITLE, NOTEBOOK, RENAME_SIGNAL, UNTITLED_DIRECTORY_NAME, UNTITLED_FILE_EXT, UNTITLED_FILE_NAME, UNTITLED_NOTEBOOK_EXT, UNTITLED_NOTEBOOK_NAME } from '../utils/const';
-import { BUCKET_LEVEL_FILE_CREATION_MESSAGE, BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE, BUCKET_RENAME_ERROR, DELETION_ERROR_TITLE, FILE_CREATION_ERROR_TITLE, FOLDER_CREATION_ERROR_TITLE, INVALID_FILE_NAME_ERROR, NAME_EXCEEDS_MAX_LENGTH_ERROR, NOTEBOOK_CREATION_ERROR_TITLE, NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE, RENAME_ERROR_TITLE, UNSUPPORTED_CREATE_ERROR, UNSUPPORTED_CREATE_TITLE } from '../utils/message';
+import { BUCKET_LEVEL_FILE_CREATION_MESSAGE, BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE, BUCKET_RENAME_ERROR, DELETION_ERROR_TITLE, FILE_CREATION_ERROR_TITLE, FOLDER_CREATION_ERROR_TITLE, INVALID_FILE_NAME_ERROR, NAME_EXCEEDS_MAX_LENGTH_ERROR, NO_DATA_PROVIDED_ERROR, NOTEBOOK_CREATION_ERROR_TITLE, NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE, OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE, RENAME_ERROR_TITLE, UNSUPPORTED_CREATE_ERROR, UNSUPPORTED_CREATE_TITLE } from '../utils/message';
 
 // Template for an empty Directory IModel.
 const DIRECTORY_IMODEL: Contents.IModel = {
@@ -283,8 +283,8 @@ export class GCSDrive implements Contents.IDrive {
       return Promise.reject(new Error(NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE));
     }
     if (!options) {
-      console.error('No data provided for this operation. :', options);
-      return Promise.reject(new Error('No data provided for this operation.'));
+      console.error(NO_DATA_PROVIDED_ERROR, options);
+      return Promise.reject(new Error(NO_DATA_PROVIDED_ERROR));
     } else if (!options.path) {
       if (options.type === DIRECTORY) {
         await showDialog({
@@ -316,10 +316,9 @@ export class GCSDrive implements Contents.IDrive {
 
     if (localPath === '/' || localPath === '') {
       console.error(
-        'Cannot create new objects in the root directory:',
-        localPath
+        OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE
       );
-      return Promise.reject(new Error('Cannot create new objects in the root directory.'));
+      return Promise.reject(new Error(OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE));
     }
 
     const parsedPath = GcsService.pathParser(localPath);
@@ -727,37 +726,12 @@ export class GCSDrive implements Contents.IDrive {
           });
 
           if (isOldPathMeetsFilename) {
-
-            // Creating Model Obj for Both Source and Destination (renamed)
-            const now = new Date().toISOString();
-
-            const oldModelObject: Partial<Contents.IModel> = {
-                name: path.split('/').at(-1) ?? '',
-                path: path,
-                type: isOldPathMeetsFilename ? FILE : DIRECTORY,
-                writable: true,
-                created: now,
-                last_modified: now,
-                content: null,
-                format: isOldPathMeetsFilename ? 'text' : null
-            };
-
-            const newModelObject: Partial<Contents.IModel> = {
-                name: newLocalPath.split('/').at(-1) ?? '',
-                path: newLocalPath,
-                type: isNewPathMeetsFilename ? FILE : DIRECTORY,
-                writable: true,
-                created: now,
-                last_modified: now,
-                content: null,
-                format: isNewPathMeetsFilename ? 'text' : null
-            };
-
             // Emitting the Signal ( If file is opened, JupyterLab updates name in the editor. )
             this._fileChanged.emit({
               type: RENAME_SIGNAL,
-              oldValue: oldModelObject,
-              newValue: newModelObject
+              // Creating Model Obj for Both Source and Destination (renamed)
+              oldValue: this.ModelObject(path,isOldPathMeetsFilename),
+              newValue: this.ModelObject(newLocalPath,isNewPathMeetsFilename)
             });
 
             return {
@@ -801,6 +775,20 @@ export class GCSDrive implements Contents.IDrive {
         this._browserWidget?.hideProgressBar();
       }
     }
+  }
+
+  ModelObject(path: string,isPathMeetsFileName : boolean): Partial<Contents.IModel> {
+    const now = new Date().toISOString();
+    return {
+      name: path.split('/').at(-1) ?? '',
+      path: path,
+      type: isPathMeetsFileName ? FILE : DIRECTORY,
+      writable: true,
+      created: now,
+      last_modified: now,
+      content: null,
+      format: isPathMeetsFileName ? 'text' : null
+    };
   }
 
   async getDownloadUrl(
