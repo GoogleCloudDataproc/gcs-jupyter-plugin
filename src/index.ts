@@ -130,8 +130,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       .catch(error => {
         console.error('Error during app restoration:', error);
       });
-
-
   }
 };
 
