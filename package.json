@@ -27,7 +27,7 @@
     "style": "style/index.css",
     "repository": {
         "type": "git",
-        "url": "https://github.com/GoogleCloudDataproc/gcs-jupyter-plugin"
+        "url": "https://github.com/GoogleCloudDataproc/gcs-jupyter-plugin.git"
     },
     "scripts": {
         "build": "jlpm build:lib && jlpm build:labextension:dev",
