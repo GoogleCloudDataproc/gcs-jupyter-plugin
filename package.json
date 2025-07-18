@@ -7,9 +7,9 @@
         "jupyterlab",
         "jupyterlab-extension"
     ],
-    "homepage": "https://github.com/harsha-accenture/gcs-jupyter-plugin.git",
+    "homepage": "https://github.com/GoogleCloudDataproc/gcs-jupyter-plugin",
     "bugs": {
-        "url": "https://github.com/harsha-accenture/gcs-jupyter-plugin.git/issues"
+        "url": "https://github.com/GoogleCloudDataproc/gcs-jupyter-plugin/issues"
     },
     "license": "Apache-2.0",
     "author": {
@@ -27,7 +27,7 @@
     "style": "style/index.css",
     "repository": {
         "type": "git",
-        "url": "https://github.com/harsha-accenture/gcs-jupyter-plugin.git.git"
+        "url": "https://github.com/GoogleCloudDataproc/gcs-jupyter-plugin"
     },
     "scripts": {
         "build": "jlpm build:lib && jlpm build:labextension:dev",
