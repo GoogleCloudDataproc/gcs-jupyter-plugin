@@ -86,7 +86,7 @@ test.describe('GCS tests', () => {
         // Verify folder creation is not allowed
         await bucket.click({ button: 'right' });
         await page.getByText('New Folder', { exact: true }).click();
-        await expect(page.getByText('Create Folder Error')).toBeVisible();
+        await expect(page.getByText('Error creating folder')).toBeVisible();
         await expect(
           page.getByText('Folders cannot be created outside of a bucket.')
         ).toBeVisible();
@@ -207,7 +207,7 @@ test.describe('GCS tests', () => {
 
         await page.getByRole('button', { name: 'Delete' }).click();
         await waitForProgressBarToDisappear(page);
-        await page.waitForTimeout(5000);
+         await page.waitForTimeout(5000);
         await expect(
           page.getByRole('listitem', { name: 'Name: UntitledFolder' })
         ).not.toBeVisible();
