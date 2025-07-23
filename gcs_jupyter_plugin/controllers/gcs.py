@@ -245,6 +245,40 @@ class RenameFileController(APIHandler):
             self.log.exception("Error renaming file")
             self.set_status(500)
             self.finish(json.dumps({"error": str(e)}))
+            
+class CopyFileController(APIHandler):
+    @tornado.web.authenticated
+    async def post(self):
+        try:
+            data = json.loads(self.request.body)
+            source_bucket = data.get("sourceBucket")
+            source_path = data.get("sourcePath")
+            destination_bucket = data.get("destinationBucket")
+            destination_path = data.get("destinationPath")
+
+            if not source_bucket or not source_path or not destination_bucket or not destination_path:
+                self.set_status(400)
+                self.finish(json.dumps({"error": MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE}))
+                return
+
+            async with aiohttp.ClientSession() as client_session:
+                client = gcs.Client(
+                    await credentials.get_cached(), self.log, client_session
+                )
+
+                result = await client.copy_file(source_bucket, source_path, destination_bucket, destination_path)
+
+                if "error" in result:
+                    self.set_status(result.get("status", 500))
+                    self.finish(json.dumps(result))
+                else:
+                    self.set_status(200)
+                    self.finish(json.dumps(result))
+
+        except Exception as e:
+            self.log.exception("Error copying file or folder")
+            self.set_status(500)
+            self.finish(json.dumps({"error": str(e)}))
 
 
 class DownloadFileController(APIHandler):

@@ -25,7 +25,7 @@ import mime from 'mime-types';
 
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { GcsBrowserWidget } from './gcsBrowserWidget';
-import { DELETE_SIGNAL, DIRECTORY, FILE, GCS_PLUGIN_TITLE, NOTEBOOK, RENAME_SIGNAL, UNTITLED_DIRECTORY_NAME, UNTITLED_FILE_EXT, UNTITLED_FILE_NAME, UNTITLED_NOTEBOOK_EXT, UNTITLED_NOTEBOOK_NAME } from '../utils/const';
+import { COPY_ERROR_TITLE, COPY_FILE_EXISTS_ERROR, COPY_FOLDER_EXISTS_ERROR, DELETE_SIGNAL, DIRECTORY, FILE, GCS_PLUGIN_TITLE, NOTEBOOK, RENAME_SIGNAL, UNTITLED_DIRECTORY_NAME, UNTITLED_FILE_EXT, UNTITLED_FILE_NAME, UNTITLED_NOTEBOOK_EXT, UNTITLED_NOTEBOOK_NAME } from '../utils/const';
 import { BUCKET_LEVEL_FILE_CREATION_MESSAGE, BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE, BUCKET_RENAME_ERROR, DELETION_ERROR_TITLE, FILE_CREATION_ERROR_TITLE, FOLDER_CREATION_ERROR_TITLE, INVALID_FILE_NAME_ERROR, NAME_EXCEEDS_MAX_LENGTH_ERROR, NO_DATA_PROVIDED_ERROR, NOTEBOOK_CREATION_ERROR_TITLE, NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE, OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE, RENAME_ERROR_TITLE, UNSUPPORTED_CREATE_ERROR, UNSUPPORTED_CREATE_TITLE } from '../utils/message';
 
 // Template for an empty Directory IModel.
@@ -777,17 +777,19 @@ export class GCSDrive implements Contents.IDrive {
     }
   }
 
-  ModelObject(path: string,isPathMeetsFileName : boolean): Partial<Contents.IModel> {
+  ModelObject(path: string, isPathMeetsFileName: boolean): Contents.IModel {
     const now = new Date().toISOString();
+    const name = path.split('/').at(-1) || '';
     return {
-      name: path.split('/').at(-1) ?? '',
+      name: name,
       path: path,
       type: isPathMeetsFileName ? FILE : DIRECTORY,
       writable: true,
       created: now,
       last_modified: now,
       content: null,
-      format: isPathMeetsFileName ? 'text' : null
+      format: isPathMeetsFileName ? 'text' : null,
+      mimetype: '',
     };
   }
 
@@ -838,8 +840,77 @@ export class GCSDrive implements Contents.IDrive {
     );
   }
 
-  copy(localPath: string, toLocalDir: string): Promise<Contents.IModel> {
-    throw new Error('Method not implemented.');
+
+
+  async copy(localPath: string, toLocalDir: string): Promise<Contents.IModel> {
+    this._browserWidget?.showProgressBar();
+    try {
+      const parsedSource = GcsService.pathParser(localPath);
+      const parsedDestinationDir = GcsService.pathParser(toLocalDir);
+
+      const sourceName = localPath.split('/').pop() ?? '';
+      const isSourceFile = sourceName.includes('.') && sourceName.lastIndexOf('.') > 0;
+
+      let newFullPathInDestination: string;
+      let copiedModel: Contents.IModel;
+
+      let sourceGcsPath = parsedSource.path;
+
+      newFullPathInDestination = `${parsedDestinationDir.bucket}/${parsedDestinationDir.path}/${sourceName}`;
+
+      const content = await GcsService.listFiles({
+        prefix: `${parsedDestinationDir.path}/${sourceName}`,
+        bucket: parsedDestinationDir.bucket
+      });
+
+      if (content.files && content.files.length > 0) {
+        await showDialog({
+          title: COPY_ERROR_TITLE,
+          body: COPY_FILE_EXISTS_ERROR,
+          buttons: [Dialog.okButton()]
+        });
+        return DIRECTORY_IMODEL;
+      }else if (content.prefixes && content.prefixes.length > 0) {
+        await showDialog({
+          title: COPY_ERROR_TITLE,
+          body: COPY_FOLDER_EXISTS_ERROR,
+          buttons: [Dialog.okButton()]
+        });
+        return DIRECTORY_IMODEL;
+      }
+      else{
+        await GcsService.copyFile({
+          sourceBucket: parsedSource.bucket,
+          sourcePath: sourceGcsPath,
+          destinationBucket: parsedDestinationDir.bucket,
+          destinationPath: `${parsedDestinationDir.path}/${sourceName}`
+        });
+
+        // Construct the IModel for the newly copied item
+        copiedModel = this.ModelObject(newFullPathInDestination, !isSourceFile);
+
+        this._fileChanged.emit({
+          type: 'new', // Indicate that a new item has been created
+          oldValue: null,
+          newValue: copiedModel
+        });
+
+        return copiedModel;
+      }
+
+    } catch (error: any) {
+      await showDialog({
+        title: COPY_ERROR_TITLE,
+        body: `Failed to copy: ${error.message || 'An unknown error occurred.'}`,
+        buttons: [Dialog.okButton()]
+      });
+      // Return a default value to satisfy the return type
+      return DIRECTORY_IMODEL;
+    } finally {
+      // Refresh the browser widget contents to show the newly copied item
+      await this._browserWidget?.refreshContents();
+      this._browserWidget?.hideProgressBar();
+    }
   }
 
   // Checkpoint APIs, not currently supported.
