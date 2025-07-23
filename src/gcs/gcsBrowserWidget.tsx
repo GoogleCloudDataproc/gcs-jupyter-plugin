@@ -27,7 +27,7 @@ import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
 import { TitleWidget } from '../controls/SidePanelTitleWidget';
 import { ProgressBarWidget } from './ProgressBarWidget';
-import { authApi, login } from '../utils/utils';
+import { authApi, IAuthCredentials, login } from '../utils/utils';
 import { Message } from '@lumino/messaging';
 
 import {
@@ -75,7 +75,7 @@ export class GcsBrowserWidget extends Widget {
     drive: GCSDrive,
     browser: FileBrowser,
     themeManager: IThemeManager,
-    credentials: any
+    credentials:  IAuthCredentials
   ) {
     super();
 
@@ -373,7 +373,7 @@ export class GcsBrowserWidget extends Widget {
       errorMessageNode.style.padding = '11px';
 
       if (credentials) {
-        if (credentials.config_error === 1) {
+        if (credentials?.config_error === 1) {
           // Config error
           errorMessageNode.textContent = GCLOUD_CONFIG_ERROR;
           this.node.appendChild(errorMessageNode);
