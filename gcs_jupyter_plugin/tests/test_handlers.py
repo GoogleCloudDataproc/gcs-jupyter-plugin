@@ -1666,3 +1666,226 @@ class TestGCSClient(unittest.IsolatedAsyncioTestCase):
         self.assertIn("message", result)
         self.assertIn(new_folder_name, result["message"])
         self.assertEqual(result["bucket"], bucket_name)
+        
+    async def test_copy_file_success(self):
+        source_bucket_name = "source-bucket"
+        destination_bucket_name = "destination-bucket"
+        source_path = "path/to/source_file.txt"
+        destination_path = "path/to/destination_file.txt"
+
+        mock_client_instance = self.mock_storage_client.return_value
+        mock_source_bucket = mock.MagicMock()
+        mock_destination_bucket = mock.MagicMock()
+
+        mock_client_instance.bucket.side_effect = [
+            mock_source_bucket,
+            mock_destination_bucket,
+        ]
+
+        mock_source_blob = self._create_mock_blob(
+            source_path,
+            100,
+            datetime.datetime(2023, 1, 1),
+            datetime.datetime(2023, 1, 1),
+            "text/plain",
+        )
+        mock_source_bucket.blob.return_value = mock_source_blob
+
+        mock_destination_blob = mock.MagicMock()
+        mock_destination_bucket.blob.return_value = mock_destination_blob
+        mock_destination_blob.exists.return_value = False
+
+        mock_source_bucket.copy_blob.return_value = self._create_mock_blob(
+            destination_path,
+            100,
+            datetime.datetime(2023, 1, 2),
+            datetime.datetime(2023, 1, 2),
+            "text/plain",
+        )
+
+        result = await self.client.copy_file(
+            source_bucket_name, source_path, destination_bucket_name, destination_path
+        )
+
+        mock_client_instance.bucket.assert_has_calls(
+            [mock.call(source_bucket_name), mock.call(destination_bucket_name)]
+        )
+        mock_source_bucket.blob.assert_called_once_with(source_path)
+        mock_destination_bucket.blob.assert_called_once_with(destination_path)
+        
+        # 1. While checking path is file or Folder 2. checking if file exists
+        self.assertEqual(mock_source_blob.exists.call_count, 2)
+        mock_destination_blob.exists.assert_called_once()
+        mock_source_bucket.copy_blob.assert_called_once_with(
+            mock_source_blob, mock_destination_bucket, new_name=destination_path
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["status"], 200)
+        self.assertEqual(result["name"], destination_path)
+        self.assertEqual(result["bucket"], mock_source_bucket.copy_blob.return_value.bucket.name)
+        self.assertEqual(result["size"], 100)
+        self.assertEqual(result["contentType"], "text/plain")
+        self.assertIn("timeCreated", result)
+        self.assertIn("updated", result)
+
+    async def test_copy_file_destination_exists(self):
+        source_bucket_name = "source-bucket"
+        destination_bucket_name = "destination-bucket"
+        source_path = "path/to/source_file.txt"
+        destination_path = "path/to/existing_destination_file.txt"
+
+        mock_client_instance = self.mock_storage_client.return_value
+        mock_source_bucket = mock.MagicMock()
+        mock_destination_bucket = mock.MagicMock()
+
+        mock_client_instance.bucket.side_effect = [
+            mock_source_bucket,
+            mock_destination_bucket,
+        ]
+
+        mock_source_blob = self._create_mock_blob(
+            source_path,
+            100,
+            datetime.datetime(2023, 1, 1),
+            datetime.datetime(2023, 1, 1),
+            "text/plain",
+        )
+        mock_source_bucket.blob.return_value = mock_source_blob
+
+        mock_destination_blob = mock.MagicMock()
+        mock_destination_bucket.blob.return_value = mock_destination_blob
+        mock_destination_blob.exists.return_value = True
+
+        result = await self.client.copy_file(
+            source_bucket_name, source_path, destination_bucket_name, destination_path
+        )
+
+        # 1. While checking path is file or Folder 2. checking if file exists
+        self.assertEqual(mock_source_blob.exists.call_count, 2)
+        mock_destination_blob.exists.assert_called_once()
+        mock_source_bucket.copy_blob.assert_not_called()
+        self.assertEqual(
+            result["error"],
+            f"A file with name '{destination_path}' already exists in the destination.",
+        )
+        self.assertEqual(result["status"], 409)
+
+    async def test_copy_folder_success(self):
+        source_bucket_name = "source-bucket"
+        destination_bucket_name = "destination-bucket"
+        source_path = "source_folder"
+        destination_path = "destination_folder"
+
+        mock_client_instance = self.mock_storage_client.return_value
+        mock_source_bucket = mock.MagicMock()
+        mock_destination_bucket = mock.MagicMock()
+
+        mock_client_instance.bucket.side_effect = [
+            mock_source_bucket,
+            mock_destination_bucket,
+        ]
+
+        mock_blobs_under_source_prefix = [
+            self._create_mock_blob(
+                "source_folder/file1.txt",
+                10,
+                datetime.datetime(2023, 1, 1),
+                datetime.datetime(2023, 1, 1),
+            ),
+            self._create_mock_blob(
+                "source_folder/subfolder/file2.txt",
+                20,
+                datetime.datetime(2023, 1, 2),
+                datetime.datetime(2023, 1, 2),
+            ),
+        ]
+        mock_source_bucket.list_blobs.return_value = mock_blobs_under_source_prefix
+
+        mock_destination_bucket.blob.return_value.exists.return_value = False
+
+        result = await self.client.copy_file(
+            source_bucket_name, source_path, destination_bucket_name, destination_path
+        )
+
+        mock_source_bucket.list_blobs.assert_called_once_with(
+            prefix=source_path + "/"
+        )
+        mock_destination_bucket.blob.assert_has_calls(
+            [
+                mock.call("destination_folder/file1.txt"),
+                mock.call("destination_folder/subfolder/file2.txt"),
+            ],
+            any_order=True,
+        )
+        self.assertEqual(mock_source_bucket.copy_blob.call_count, 2)
+        mock_source_bucket.copy_blob.assert_has_calls(
+            [
+                mock.call(
+                    mock_blobs_under_source_prefix[0],
+                    mock_destination_bucket,
+                    new_name="destination_folder/file1.txt",
+                ),
+                mock.call(
+                    mock_blobs_under_source_prefix[1],
+                    mock_destination_bucket,
+                    new_name="destination_folder/subfolder/file2.txt",
+                ),
+            ],
+            any_order=True,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["status"], 200)
+        self.assertEqual(
+            result["message"],
+            f"Folder '{source_path}' and its contents copied to '{destination_path}'.",
+        )
+        self.assertEqual(result["bucket"], destination_bucket_name)
+
+    async def test_copy_folder_destination_file_exists(self):
+        source_bucket_name = "source-bucket"
+        destination_bucket_name = "destination-bucket"
+        source_path = "source_folder"
+        destination_path = "destination_folder"
+
+        mock_client_instance = self.mock_storage_client.return_value
+        mock_source_bucket = mock.MagicMock()
+        mock_destination_bucket = mock.MagicMock()
+
+        mock_client_instance.bucket.side_effect = [
+            mock_source_bucket,
+            mock_destination_bucket,
+        ]
+
+        mock_blobs_under_source_prefix = [
+            self._create_mock_blob(
+                "source_folder/file1.txt",
+                10,
+                datetime.datetime(2023, 1, 1),
+                datetime.datetime(2023, 1, 1),
+            )
+        ]
+        mock_source_bucket.list_blobs.return_value = mock_blobs_under_source_prefix
+
+        mock_destination_bucket.blob.return_value.exists.side_effect = [
+            True
+        ]
+
+        result = await self.client.copy_file(
+            source_bucket_name, source_path, destination_bucket_name, destination_path
+        )
+
+        mock_source_bucket.list_blobs.assert_called_once_with(
+            prefix=source_path + "/"
+        )
+        mock_destination_bucket.blob.assert_called_once_with(
+            "destination_folder/file1.txt"
+        )
+        mock_source_bucket.copy_blob.assert_not_called()
+
+        self.assertEqual(
+            result["error"],
+            f"A file/folder with name 'destination_folder/file1.txt' already exists in the destination.",
+        )
+        self.assertEqual(result["status"], 409)
