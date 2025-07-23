@@ -75,7 +75,7 @@ export class GcsBrowserWidget extends Widget {
     drive: GCSDrive,
     browser: FileBrowser,
     themeManager: IThemeManager,
-    credentials:  IAuthCredentials
+    credentials:  IAuthCredentials | undefined
   ) {
     super();
 
@@ -86,7 +86,7 @@ export class GcsBrowserWidget extends Widget {
     this._browser.showFileFilter = true;
     this._browser.showHiddenFiles = true;
 
-    if (!credentials.login_error && !credentials.config_error) {
+    if (!credentials?.login_error && !credentials?.config_error) {
       // Create an empty panel layout initially
       this.layout = new PanelLayout();
       this.node.style.height = '100%';
