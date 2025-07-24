@@ -16,13 +16,18 @@
  */
 
 import { Widget, PanelLayout } from '@lumino/widgets';
-import { Dialog, IThemeManager, ToolbarButton, showDialog } from '@jupyterlab/apputils';
+import {
+  Dialog,
+  IThemeManager,
+  ToolbarButton,
+  showDialog
+} from '@jupyterlab/apputils';
 import { FileBrowser } from '@jupyterlab/filebrowser';
 import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
 import { TitleWidget } from '../controls/SidePanelTitleWidget';
 import { ProgressBarWidget } from './ProgressBarWidget';
-import { authApi, login } from '../utils/utils';
+import { authApi, IAuthCredentials, login } from '../utils/utils';
 import { Message } from '@lumino/messaging';
 
 import {
@@ -36,24 +41,44 @@ import {
   iconGCSUploadDark,
   iconSigninGoogle
 } from '../utils/icon';
-import { GCS_PLUGIN_TITLE , NEW_FOLDER , FILE_UPLOAD, REFRESH , TOGGLE_FILE_FILTER } from '../utils/const';
-import { BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_UPLOAD_MESSAGE, FILE_EXIST_TITLE, FILE_OVERWRITE_MESSAGE, FOLDER_CREATION_ERROR_TITLE, GCLOUD_CONFIG_ERROR, OVERWRITE_BUTTON_TEXT, UPLOAD_ERROR_TITLE } from '../utils/message';
+import {
+  GCS_PLUGIN_TITLE,
+  NEW_FOLDER,
+  FILE_UPLOAD,
+  REFRESH,
+  TOGGLE_FILE_FILTER
+} from '../utils/const';
+import {
+  BUCKET_LEVEL_FOLDER_CREATION_MESSAGE,
+  BUCKET_LEVEL_UPLOAD_MESSAGE,
+  FILE_EXIST_TITLE,
+  FILE_OVERWRITE_MESSAGE,
+  FOLDER_CREATION_ERROR_TITLE,
+  GCLOUD_CONFIG_ERROR,
+  OVERWRITE_BUTTON_TEXT,
+  UPLOAD_ERROR_TITLE
+} from '../utils/message';
 
 export class GcsBrowserWidget extends Widget {
   private readonly _themeManager: IThemeManager;
-  private readonly fileInput: HTMLInputElement;
-  newFolder: ToolbarButton;
-  private gcsUpload: ToolbarButton;
-  private refreshButton: ToolbarButton;
-  private toggleFileFilter: ToolbarButton;
-  private readonly _progressBarWidget: ProgressBarWidget;
+  private readonly fileInput!: HTMLInputElement;
+  newFolder!: ToolbarButton;
+  private gcsUpload!: ToolbarButton;
+  private refreshButton!: ToolbarButton;
+  private toggleFileFilter!: ToolbarButton;
+  private readonly _progressBarWidget!: ProgressBarWidget;
 
   private readonly _browser: FileBrowser;
 
-  private readonly _titleWidget: TitleWidget;
-
-  constructor(drive: GCSDrive, browser: FileBrowser, themeManager: IThemeManager) {
+  private readonly _titleWidget!: TitleWidget;
+  constructor(
+    drive: GCSDrive,
+    browser: FileBrowser,
+    themeManager: IThemeManager,
+    credentials:  IAuthCredentials | undefined
+  ) {
     super();
+
     this._browser = browser;
     this._themeManager = themeManager;
 
@@ -61,70 +86,72 @@ export class GcsBrowserWidget extends Widget {
     this._browser.showFileFilter = true;
     this._browser.showHiddenFiles = true;
 
-    // Create an empty panel layout initially
-    this.layout = new PanelLayout();
-    this.node.style.height = '100%';
-    this.node.style.display = 'flex';
-    this.node.style.flexDirection = 'column';
+    if (!credentials?.login_error && !credentials?.config_error) {
+      // Create an empty panel layout initially
+      this.layout = new PanelLayout();
+      this.node.style.height = '100%';
+      this.node.style.display = 'flex';
+      this.node.style.flexDirection = 'column';
 
-    this._browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
-    this._browser.node.style.flexShrink = '1';
-    this._browser.node.style.flexGrow = '1';
+      this._browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
+      this._browser.node.style.flexShrink = '1';
+      this._browser.node.style.flexGrow = '1';
 
-    // Title widget for the GCS Browser
-    this._titleWidget = new TitleWidget(GCS_PLUGIN_TITLE, false);
-    (this.layout as PanelLayout).addWidget(this._titleWidget);
+      // Title widget for the GCS Browser
+      this._titleWidget = new TitleWidget(GCS_PLUGIN_TITLE, false);
+      (this.layout as PanelLayout).addWidget(this._titleWidget);
 
-    this._progressBarWidget = new ProgressBarWidget();
-    (this.layout as PanelLayout).addWidget(this._progressBarWidget);
+      this._progressBarWidget = new ProgressBarWidget();
+      (this.layout as PanelLayout).addWidget(this._progressBarWidget);
 
-    // Listen for changes in the FileBrowser's path
-    this._browser.model.pathChanged.connect(this.onPathChanged, this);
+      // Listen for changes in the FileBrowser's path
+      this._browser.model.pathChanged.connect(this.onPathChanged, this);
 
-    const originalCd = this._browser.model.cd;
-    this._browser.model.cd = async (path: string) => {
-      this.showProgressBar();
-      try {
-        const result = await originalCd.call(this._browser.model, path);
-        return result;
-      } finally {
-        this.hideProgressBar();
-      }
-    };
+      const originalCd = this._browser.model.cd;
+      this._browser.model.cd = async (path: string) => {
+        this.showProgressBar();
+        try {
+          const result = await originalCd.call(this._browser.model, path);
+          return result;
+        } finally {
+          this.hideProgressBar();
+        }
+      };
 
-    this._browser.showFileCheckboxes = false;
-    (this.layout as PanelLayout).addWidget(this._browser);
-    this._browser.node.style.flexShrink = '1';
-    this._browser.node.style.flexGrow = '1';
+      this._browser.showFileCheckboxes = false;
+      (this.layout as PanelLayout).addWidget(this._browser);
+      this._browser.node.style.flexShrink = '1';
+      this._browser.node.style.flexGrow = '1';
 
-    // Create a file input element
-    this.fileInput = document.createElement('input');
-    this.fileInput.type = 'file';
-    this.fileInput.multiple = true; // Enable multiple file selection
-    this.fileInput.style.display = 'none';
+      // Create a file input element
+      this.fileInput = document.createElement('input');
+      this.fileInput.type = 'file';
+      this.fileInput.multiple = true; // Enable multiple file selection
+      this.fileInput.style.display = 'none';
 
-    // Attach event listener for file selection
-    this.fileInput.addEventListener('change', this.handleFileUpload);
+      // Attach event listener for file selection
+      this.fileInput.addEventListener('change', this.handleFileUpload);
 
-    // Append the file input element to the widget's node
-    this.node.appendChild(this.fileInput);
-    
-    this.newFolder = this.createNewFolderButton(true);
-    this.gcsUpload = this.createUploadButton(true);
-    this.refreshButton = this.createRefreshButton(true);
-    this.toggleFileFilter = this.createToggleFileFilterButton(true);
+      // Append the file input element to the widget's node
+      this.node.appendChild(this.fileInput);
 
-    // Since the default location is root. disabling upload and new folder buttons
-    this.newFolder.enabled = false;
-    this.gcsUpload.enabled = false;
+      this.newFolder = this.createNewFolderButton(true);
+      this.gcsUpload = this.createUploadButton(true);
+      this.refreshButton = this.createRefreshButton(true);
+      this.toggleFileFilter = this.createToggleFileFilterButton(true);
 
-    this._browser.toolbar.addItem(NEW_FOLDER, this.newFolder);
-    this._browser.toolbar.addItem(FILE_UPLOAD, this.gcsUpload);
-    this._browser.toolbar.addItem(REFRESH, this.refreshButton);
-    this._browser.toolbar.addItem(TOGGLE_FILE_FILTER, this.toggleFileFilter);
+      // Since the default location is root. disabling upload and new folder buttons
+      this.newFolder.enabled = false;
+      this.gcsUpload.enabled = false;
 
-    this._themeManager.themeChanged.connect(this.onThemeChanged, this);
-    this.onThemeChanged();
+      this._browser.toolbar.addItem(NEW_FOLDER, this.newFolder);
+      this._browser.toolbar.addItem(FILE_UPLOAD, this.gcsUpload);
+      this._browser.toolbar.addItem(REFRESH, this.refreshButton);
+      this._browser.toolbar.addItem(TOGGLE_FILE_FILTER, this.toggleFileFilter);
+
+      this._themeManager.themeChanged.connect(this.onThemeChanged, this);
+      this.onThemeChanged();
+    }
   }
 
   protected onAfterAttach(msg: Message): void {
@@ -174,7 +201,9 @@ export class GcsBrowserWidget extends Widget {
   }
 
   private readonly onThemeChanged = () => {
-    const isLight = this._themeManager.theme ? this._themeManager.isLight(this._themeManager.theme) : true;
+    const isLight = this._themeManager.theme
+      ? this._themeManager.isLight(this._themeManager.theme)
+      : true;
 
     const newFolderEnabled = this.newFolder.enabled;
     const gcsUploadEnabled = this.gcsUpload.enabled;
@@ -215,7 +244,9 @@ export class GcsBrowserWidget extends Widget {
       browserToolbar.addItem(REFRESH, this.refreshButton);
       browserToolbar.addItem(TOGGLE_FILE_FILTER, this.toggleFileFilter);
     } else {
-        console.error("Toolbar addItem method not found at runtime. Cannot re-add buttons.");
+      console.error(
+        'Toolbar addItem method not found at runtime. Cannot re-add buttons.'
+      );
     }
   };
 
@@ -342,10 +373,9 @@ export class GcsBrowserWidget extends Widget {
       errorMessageNode.style.padding = '11px';
 
       if (credentials) {
-        if (credentials.config_error === 1) {
+        if (credentials?.config_error === 1) {
           // Config error
-          errorMessageNode.textContent =
-            GCLOUD_CONFIG_ERROR;
+          errorMessageNode.textContent = GCLOUD_CONFIG_ERROR;
           this.node.appendChild(errorMessageNode);
           return;
         }
@@ -422,12 +452,11 @@ export class GcsBrowserWidget extends Widget {
   }
 
   private readonly onPathChanged = () => {
-
     // The below 2 lines of code is added as a workaround for resetting the file filter
-    if(this._browser.showFileFilter){
+    if (this._browser.showFileFilter) {
       this._browser.showFileFilter = false;
       this._browser.showFileFilter = true;
-    } 
+    }
 
     const currentPath = this._browser.model.path.split(':')[1];
     // Check if the current path is the root (empty string or just '/')

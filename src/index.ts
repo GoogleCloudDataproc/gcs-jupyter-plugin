@@ -31,9 +31,18 @@ import {
 } from '@jupyterlab/filebrowser';
 import { Dialog, IThemeManager, showDialog } from '@jupyterlab/apputils';
 import { iconStorage, iconStorageDark } from './utils/icon';
-import { GCS_PLUGIN_TITLE, HEALTH_ENDPOINT, NAMESPACE, PLUGIN_ID } from './utils/const';
+import {
+  GCS_PLUGIN_TITLE,
+  HEALTH_ENDPOINT,
+  NAMESPACE,
+  PLUGIN_ID
+} from './utils/const';
 import { requestAPI } from './handler';
-import { JUPYTER_SERVER_ERROR_MESSAGE, JUPYTER_SERVER_ERROR_TITLE } from './utils/message';
+import {
+  JUPYTER_SERVER_ERROR_MESSAGE,
+  JUPYTER_SERVER_ERROR_TITLE
+} from './utils/message';
+import { authApi } from './utils/utils';
 
 /**
  * Initialization data for the gcs-jupyter-plugin extension.
@@ -49,7 +58,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     IDocumentManager,
     IDefaultFileBrowser
   ],
-  activate: async(
+  activate: async (
     app: JupyterFrontEnd,
     factory: IFileBrowserFactory,
     themeManager: IThemeManager,
@@ -62,7 +71,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       const isLightTheme = themeManager.theme
         ? themeManager.isLight(themeManager.theme)
         : true;
-      panelGcs.title.icon = isLightTheme ? iconStorage : iconStorageDark
+      panelGcs.title.icon = isLightTheme ? iconStorage : iconStorageDark;
     };
 
     const gcsDrive = new GCSDrive(app);
@@ -71,8 +80,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       driveName: gcsDrive.name,
       refreshInterval: 300000 // 5 mins
     });
+    const credentials = await authApi();
 
-    const gcsBrowserWidget = new GcsBrowserWidget(gcsDrive, gcsBrowser, themeManager);
+    const gcsBrowserWidget = new GcsBrowserWidget(
+      gcsDrive,
+      gcsBrowser,
+      themeManager,
+      credentials
+    );
     gcsDrive.setBrowserWidget(gcsBrowserWidget);
     documentManager.services.contents.addDrive(gcsDrive);
 
@@ -94,7 +109,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Filter enabling and disabling when left sidebar changes to streamline notebook creation from launcher.
     app.restored
       .then(async () => {
-
         try {
           const url = HEALTH_ENDPOINT;
           await requestAPI(url);
@@ -118,7 +132,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 gcsDrive.selected_panel = args.currentTitle._caption;
                 gcsBrowserWidget.browser.showFileFilter = true;
                 gcsBrowserWidget.browser.showFileFilter = false;
-              }else {
+              } else {
                 gcsDrive.selected_panel = args.currentTitle._caption;
                 defaultBrowser.showFileFilter = true;
                 defaultBrowser.showFileFilter = false;
