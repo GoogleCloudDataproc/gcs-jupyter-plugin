@@ -214,20 +214,26 @@ class RenameFileController(APIHandler):
                 self.finish(json.dumps({"error": "Missing required parameters."}))
                 return
 
-            # Currently rename_blob only works within the same bucket
-            if old_bucket != new_bucket:
-                self.set_status(400)
-                self.finish(
-                    json.dumps({"error": "Cross-bucket renaming is not supported."})
-                )
-                return
-
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
-
-                result = await client.rename_file(old_bucket, old_path, new_path)
+            
+                if old_bucket != new_bucket:
+                    # In Jupyter lab, The UI does not allow cross-bucket renaming, and user can modify the name of the file alone.
+                    # Jupyter lab appends the prefix ( bucket and parent folder if any ) to the new path when renaming,
+                    # so we can safely assume that old_bucket and new_bucket are the same in the case of renaming.
+                    
+                    # Cut-paste functionality is using rename functionality internally, which allows cross-bucket renaming.
+                    # For cut-paste scenario, there is a chance that the old_bucket and new_bucket are different.
+                    # Google storage sdk (python) does not support cross-bucket renaming, so we need to handle this case.
+                    # So, when user performs cut-paste operation within the same bucket, we can allow the renaming operation.
+                    # If the user tries to rename a file across buckets, we will copy the file to the new bucket and delete the old file.
+                    # This is a workaround to support cross-bucket renaming, as the Google storage sdk (python) does not support cross-bucket renaming directly.
+                    result = await client.move_blob(old_bucket, old_path, new_bucket, new_path)
+                else:
+                    # If the old and new buckets are the same, we can use the rename operation
+                    result = await client.rename_file(old_bucket, old_path, new_path)
 
                 # Check for specific error conditions in the result
                 if "error" in result:
