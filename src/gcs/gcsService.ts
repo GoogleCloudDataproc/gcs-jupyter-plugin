@@ -17,7 +17,7 @@
 
 import { requestAPI } from '../handler';
 import { showDialog, Dialog } from '@jupyterlab/apputils';
-import { CREATE_FOLDER_ENDPOINT, DELETE_ENDPOINT, LIST_BUCKETS_ENDPOINT, LIST_FILES_ENDPOINT, LOAD_FILE_ENDPOINT, RENAME_ENDPOINT, SAVE_ENDPOINT } from '../utils/const';
+import { COPY_ENDPOINT, CREATE_FOLDER_ENDPOINT, DELETE_ENDPOINT, LIST_BUCKETS_ENDPOINT, LIST_FILES_ENDPOINT, LOAD_FILE_ENDPOINT, RENAME_ENDPOINT, SAVE_ENDPOINT } from '../utils/const';
 
 export class GcsService {
   /**
@@ -225,6 +225,38 @@ export class GcsService {
       console.error('Error during rename operation:', error);
       throw error?.message ?? 'Error renaming file';
     }
+  }
+
+  /**
+   * Thin wrapper around storage.object.copy
+   * @see https://cloud.google.com/storage/docs/copying-objects
+   */
+  static async copyFile({
+    sourceBucket,
+    sourcePath,
+    destinationBucket,
+    destinationPath
+  }: {
+    sourceBucket: string;
+    sourcePath: string;
+    destinationBucket: string;
+    destinationPath: string;
+  }) {
+    
+      const response: { status?: number; error?: string } = await requestAPI(
+        COPY_ENDPOINT,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceBucket,
+            sourcePath,
+            destinationBucket,
+            destinationPath
+          })
+        }
+      );
+
+      return response;
   }
 
   /**

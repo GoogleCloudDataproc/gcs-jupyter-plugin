@@ -544,6 +544,104 @@ class Client(tornado.web.RequestHandler):
                 "error": f"Failed to rename folder: {str(e)}",
                 "status": 500,
             }
+            
+    async def copy_file(self, source_bucket_name, source_path, destination_bucket_name, destination_path):
+        """Copies a blob from one bucket to another, or within the same bucket.
+        Can also copy a folder (all blobs with a given prefix).
+        """
+        try:
+            token = self._access_token
+            project = self.project_id
+            creds = credentials.Credentials(token)
+            storage_client = storage.Client(project=project, credentials=creds)
+
+            source_bucket = storage_client.bucket(source_bucket_name)
+            destination_bucket = storage_client.bucket(destination_bucket_name)
+
+            source_blob = source_bucket.blob(source_path)
+
+            is_folder = False
+            # Check if source_path is a folder by checking for objects with its prefix
+            blobs_under_source_prefix = list(source_bucket.list_blobs(prefix=source_path + "/"))
+            if blobs_under_source_prefix or (source_blob.exists() and source_blob.size == 0 and source_blob.name.endswith('/')):
+                is_folder = True
+
+            if is_folder:
+                # Handle folder copy
+                source_prefix_normalized = source_path if source_path.endswith('/') else source_path + '/'
+                destination_prefix_normalized = destination_path if destination_path.endswith('/') else destination_path + '/'
+
+                if source_bucket_name == destination_bucket_name and destination_prefix_normalized.startswith(source_prefix_normalized):
+                    return {
+                        "error": f"Cannot paste folder '{source_path}' to a sub-path of itself '{destination_path}'.",
+                        "status": 400,
+                    }
+
+                # all blobs within the source folder
+                blobs_to_copy = blobs_under_source_prefix
+
+                if not blobs_to_copy:
+                    # If it's an empty folder (0-byte object marker), copy it
+                    empty_folder_blob = source_bucket.blob(source_prefix_normalized)
+                    if empty_folder_blob.exists() and empty_folder_blob.size == 0:
+                        new_blob = source_bucket.copy_blob(empty_folder_blob, destination_bucket, new_name=destination_prefix_normalized)
+                        return {
+                            "name": new_blob.name,
+                            "bucket": destination_bucket_name,
+                            "success": True,
+                            "status": 200,
+                            "message": "Empty folder copied successfully.",
+                        }
+                    else:
+                        return {"error": f"Folder '{source_path}' not found or empty.", "status": 404}
+
+
+                for blob in blobs_to_copy:
+                    relative_path = blob.name[len(source_prefix_normalized):]
+                    new_blob_name = destination_prefix_normalized + relative_path
+
+                    # Check for existence at destination before copying
+                    if destination_bucket.blob(new_blob_name).exists():
+                        return {
+                            "error": f"A file/folder with name '{new_blob_name}' already exists in the destination.",
+                            "status": 409, # Conflict
+                        }
+                    source_bucket.copy_blob(blob, destination_bucket, new_name=new_blob_name)
+                
+                return {
+                    "message": f"Folder '{source_path}' and its contents copied to '{destination_path}'.",
+                    "bucket": destination_bucket_name,
+                    "success": True,
+                    "status": 200,
+                }
+            else:
+                # Handle single file copy
+                destination_blob = destination_bucket.blob(destination_path)
+
+                if not source_blob.exists():
+                    return {"error": f"Source file '{source_path}' not found.", "status": 404}
+
+                if destination_blob.exists():
+                    return {
+                        "error": f"A file with name '{destination_path}' already exists in the destination.",
+                        "status": 409, # Conflict
+                    }
+
+                new_blob = source_bucket.copy_blob(source_blob, destination_bucket, new_name=destination_path)
+                return {
+                    "name": new_blob.name,
+                    "bucket": new_blob.bucket.name,
+                    "size": new_blob.size,
+                    "contentType": new_blob.content_type,
+                    "timeCreated": (new_blob.time_created.isoformat() if new_blob.time_created else ""),
+                    "updated": (new_blob.updated.isoformat() if new_blob.updated else ""),
+                    "success": True,
+                    "status": 200,
+                }
+
+        except Exception as e:
+            self.log.exception(f"Error copying from {source_path} to {destination_path}.")
+            return {"error": str(e), "status": 500}
 
     async def download_file(self, bucket_name, file_path, name, format):
         try:
