@@ -65,10 +65,3 @@ export const UNTITLED_NOTEBOOK_EXT = '.ipynb'
 /** Jupyter signals */
 export const DELETE_SIGNAL = 'delete'
 export const RENAME_SIGNAL = 'rename'
-
-/** Copy Operation */
-export const COPY_ERROR_TITLE = 'Copy Error';
-export const COPY_GENERAL_FILE_ERROR = 'An error occurred while copying the file.';
-export const COPY_GENERAL_FOLDER_ERROR = 'An error occurred while copying the folder.';
-export const COPY_FILE_EXISTS_ERROR = 'File already exists in the destination directory.';
-export const COPY_FOLDER_EXISTS_ERROR = 'Folder already exists.';

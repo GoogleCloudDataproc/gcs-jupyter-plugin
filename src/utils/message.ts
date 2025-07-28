@@ -63,3 +63,15 @@ export const RENAME_ERROR_TITLE = 'Rename Error'
 export const NAME_EXCEEDS_MAX_LENGTH_ERROR = 'The maximum object length is 1024 characters.'
 export const BUCKET_RENAME_ERROR = 'Renaming Bucket is not allowed.'
 export const INVALID_FILE_NAME_ERROR = 'Invalid File Name Provided.'
+
+/** Pasting in root folder (Bucket) */
+export const PASTE_BUCKET_TITLE = 'Invalid Destination'
+export const PASTE_BUCKET_ERROR_MESSAGE = 'Cannot paste files or folders into buckets directory.'
+
+/** Copy Operation */
+export const COPY_ERROR_TITLE = 'Error Copying File';
+export const COPY_GENERAL_FILE_ERROR = 'An error occurred while copying the file.';
+export const COPY_GENERAL_FOLDER_ERROR = 'An error occurred while copying the folder.';
+export const COPY_FILE_EXISTS_ERROR = 'File already exists in the destination directory.';
+export const COPY_FOLDER_EXISTS_ERROR = 'Folder already exists.';
+export const COPY_FILE_TO_SAME_LOCATION_ERROR = 'Cannot copy file to its original location.'

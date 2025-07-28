@@ -223,7 +223,6 @@ export class GcsService {
         buttons: [Dialog.okButton()]
       });
       console.error('Error during rename operation:', error);
-      throw error?.message ?? 'Error renaming file';
     }
   }
 
@@ -243,7 +242,7 @@ export class GcsService {
     destinationPath: string;
   }) {
     
-      const response: { status?: number; error?: string } = await requestAPI(
+      const response: { status?: number; isFolder?: boolean; error?: string; } = await requestAPI(
         COPY_ENDPOINT,
         {
           method: 'POST',

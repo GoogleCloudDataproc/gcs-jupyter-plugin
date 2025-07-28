@@ -578,6 +578,7 @@ class Client(tornado.web.RequestHandler):
                     return {
                         "error": f"Cannot paste folder '{source_path}' to a sub-path of itself '{destination_path}'.",
                         "status": 400,
+                        "isFolder": True
                     }
 
                 # all blobs within the source folder
@@ -593,10 +594,11 @@ class Client(tornado.web.RequestHandler):
                             "bucket": destination_bucket_name,
                             "success": True,
                             "status": 200,
+                            "isFolder": True,
                             "message": "Empty folder copied successfully.",
                         }
                     else:
-                        return {"error": f"Folder '{source_path}' not found or empty.", "status": 404}
+                        return {"error": f"Folder '{source_path}' not found or empty.", "status": 404 , "isFolder": True}
 
 
                 for blob in blobs_to_copy:
@@ -608,6 +610,7 @@ class Client(tornado.web.RequestHandler):
                         return {
                             "error": f"A file/folder with name '{new_blob_name}' already exists in the destination.",
                             "status": 409, # Conflict
+                            "isFolder": True
                         }
                     source_bucket.copy_blob(blob, destination_bucket, new_name=new_blob_name)
                 
@@ -615,6 +618,7 @@ class Client(tornado.web.RequestHandler):
                     "message": f"Folder '{source_path}' and its contents copied to '{destination_path}'.",
                     "bucket": destination_bucket_name,
                     "success": True,
+                    "isFolder": True,
                     "status": 200,
                 }
             else:
@@ -622,11 +626,12 @@ class Client(tornado.web.RequestHandler):
                 destination_blob = destination_bucket.blob(destination_path)
 
                 if not source_blob.exists():
-                    return {"error": f"Source file '{source_path}' not found.", "status": 404}
+                    return {"error": f"Source file '{source_path}' not found.", "status": 404, "isFolder": False}
 
                 if destination_blob.exists():
                     return {
                         "error": f"A file with name '{destination_path}' already exists in the destination.",
+                        "isFolder": False,
                         "status": 409, # Conflict
                     }
                 new_blob = source_bucket.copy_blob(source_blob, destination_bucket, new_name=destination_path)
@@ -638,6 +643,7 @@ class Client(tornado.web.RequestHandler):
                     "timeCreated": (new_blob.time_created.isoformat() if new_blob.time_created else ""),
                     "updated": (new_blob.updated.isoformat() if new_blob.updated else ""),
                     "success": True,
+                    "isFolder": False,
                     "status": 200,
                 }
 
