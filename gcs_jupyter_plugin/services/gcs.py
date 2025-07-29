@@ -554,9 +554,12 @@ class Client(tornado.web.RequestHandler):
             project = self.project_id
             creds = credentials.Credentials(token)
             storage_client = storage.Client(project=project, credentials=creds)
-
+            
             source_bucket = storage_client.bucket(source_bucket_name)
             destination_bucket = storage_client.bucket(destination_bucket_name)
+            
+            if destination_path.startswith('/'):
+                destination_path = destination_path[1:]
 
             source_blob = source_bucket.blob(source_path)
 
@@ -565,9 +568,9 @@ class Client(tornado.web.RequestHandler):
             blobs_under_source_prefix = list(source_bucket.list_blobs(prefix=source_path + "/"))
             if blobs_under_source_prefix or (source_blob.exists() and source_blob.size == 0 and source_blob.name.endswith('/')):
                 is_folder = True
-
+                
             if is_folder:
-                # Handle folder copy
+                # folder copy
                 source_prefix_normalized = source_path if source_path.endswith('/') else source_path + '/'
                 destination_prefix_normalized = destination_path if destination_path.endswith('/') else destination_path + '/'
 
@@ -575,6 +578,7 @@ class Client(tornado.web.RequestHandler):
                     return {
                         "error": f"Cannot paste folder '{source_path}' to a sub-path of itself '{destination_path}'.",
                         "status": 400,
+                        "isFolder": True
                     }
 
                 # all blobs within the source folder
@@ -590,10 +594,11 @@ class Client(tornado.web.RequestHandler):
                             "bucket": destination_bucket_name,
                             "success": True,
                             "status": 200,
+                            "isFolder": True,
                             "message": "Empty folder copied successfully.",
                         }
                     else:
-                        return {"error": f"Folder '{source_path}' not found or empty.", "status": 404}
+                        return {"error": f"Folder '{source_path}' not found or empty.", "status": 404 , "isFolder": True}
 
 
                 for blob in blobs_to_copy:
@@ -605,6 +610,7 @@ class Client(tornado.web.RequestHandler):
                         return {
                             "error": f"A file/folder with name '{new_blob_name}' already exists in the destination.",
                             "status": 409, # Conflict
+                            "isFolder": True
                         }
                     source_bucket.copy_blob(blob, destination_bucket, new_name=new_blob_name)
                 
@@ -612,6 +618,7 @@ class Client(tornado.web.RequestHandler):
                     "message": f"Folder '{source_path}' and its contents copied to '{destination_path}'.",
                     "bucket": destination_bucket_name,
                     "success": True,
+                    "isFolder": True,
                     "status": 200,
                 }
             else:
@@ -619,14 +626,14 @@ class Client(tornado.web.RequestHandler):
                 destination_blob = destination_bucket.blob(destination_path)
 
                 if not source_blob.exists():
-                    return {"error": f"Source file '{source_path}' not found.", "status": 404}
+                    return {"error": f"Source file '{source_path}' not found.", "status": 404, "isFolder": False}
 
                 if destination_blob.exists():
                     return {
                         "error": f"A file with name '{destination_path}' already exists in the destination.",
+                        "isFolder": False,
                         "status": 409, # Conflict
                     }
-
                 new_blob = source_bucket.copy_blob(source_blob, destination_bucket, new_name=destination_path)
                 return {
                     "name": new_blob.name,
@@ -636,11 +643,57 @@ class Client(tornado.web.RequestHandler):
                     "timeCreated": (new_blob.time_created.isoformat() if new_blob.time_created else ""),
                     "updated": (new_blob.updated.isoformat() if new_blob.updated else ""),
                     "success": True,
+                    "isFolder": False,
                     "status": 200,
                 }
 
         except Exception as e:
             self.log.exception(f"Error copying from {source_path} to {destination_path}.")
+            return {"error": str(e), "status": 500}
+        
+    async def move_blob(
+        self,
+        source_bucket_name: str,
+        source_path: str,
+        destination_bucket_name: str,
+        destination_path: str,
+    ):
+        """
+        Moves a file or folder from a source location to a destination location.
+        This handles both intra-bucket and inter-bucket moves.
+        It uses a copy-then-delete strategy for all moves, as GCS does not support atomic cross-bucket moves.
+        """
+        try:
+            source_path = source_path.rstrip('/') if source_path.endswith("/") else source_path
+            destination_path = destination_path.rstrip('/') if destination_path.endswith("/") else destination_path
+            # First, attempt to copy the file/folder
+            copy_result = await self.copy_file(
+                source_bucket_name, source_path, destination_bucket_name, destination_path
+            )
+
+            if not copy_result.get("success"):
+                return copy_result  # Return error if copy failed
+
+            # If copy was successful, proceed to delete the source
+            delete_result = await self.delete_file(source_bucket_name, source_path)
+
+            if not delete_result.get("success"):
+                # Log a warning if deletion fails after successful copy, but still report success for the move
+                # as the file is now in the new location.
+                self.log.warning(
+                    f"Failed to delete source '{source_path}' from bucket '{source_bucket_name}' "
+                    f"after successful copy to '{destination_path}' in '{destination_bucket_name}'. "
+                    f"Error: {delete_result.get('error')}"
+                )
+                
+            # Return the success message from the copy operation
+            return copy_result
+
+        except Exception as e:
+            self.log.exception(
+                f"Error moving '{source_path}' from '{source_bucket_name}' "
+                f"to '{destination_path}' in '{destination_bucket_name}'."
+            )
             return {"error": str(e), "status": 500}
 
     async def download_file(self, bucket_name, file_path, name, format):

@@ -25,8 +25,8 @@ import mime from 'mime-types';
 
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { GcsBrowserWidget } from './gcsBrowserWidget';
-import { COPY_ERROR_TITLE, COPY_FILE_EXISTS_ERROR, COPY_FOLDER_EXISTS_ERROR, DELETE_SIGNAL, DIRECTORY, FILE, GCS_PLUGIN_TITLE, NOTEBOOK, RENAME_SIGNAL, UNTITLED_DIRECTORY_NAME, UNTITLED_FILE_EXT, UNTITLED_FILE_NAME, UNTITLED_NOTEBOOK_EXT, UNTITLED_NOTEBOOK_NAME } from '../utils/const';
-import { BUCKET_LEVEL_FILE_CREATION_MESSAGE, BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE, BUCKET_RENAME_ERROR, DELETION_ERROR_TITLE, FILE_CREATION_ERROR_TITLE, FOLDER_CREATION_ERROR_TITLE, INVALID_FILE_NAME_ERROR, NAME_EXCEEDS_MAX_LENGTH_ERROR, NO_DATA_PROVIDED_ERROR, NOTEBOOK_CREATION_ERROR_TITLE, NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE, OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE, RENAME_ERROR_TITLE, UNSUPPORTED_CREATE_ERROR, UNSUPPORTED_CREATE_TITLE } from '../utils/message';
+import {  DELETE_SIGNAL, DIRECTORY, FILE, GCS_PLUGIN_TITLE, NOTEBOOK, RENAME_SIGNAL, UNTITLED_DIRECTORY_NAME, UNTITLED_FILE_EXT, UNTITLED_FILE_NAME, UNTITLED_NOTEBOOK_EXT, UNTITLED_NOTEBOOK_NAME } from '../utils/const';
+import { COPY_ERROR_TITLE, BUCKET_LEVEL_FILE_CREATION_MESSAGE, BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE, BUCKET_RENAME_ERROR, DELETION_ERROR_TITLE, FILE_CREATION_ERROR_TITLE, FOLDER_CREATION_ERROR_TITLE, INVALID_FILE_NAME_ERROR, NAME_EXCEEDS_MAX_LENGTH_ERROR, NO_DATA_PROVIDED_ERROR, NOTEBOOK_CREATION_ERROR_TITLE, NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE, OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE, PASTE_BUCKET_ERROR_MESSAGE, PASTE_BUCKET_TITLE, RENAME_ERROR_TITLE, UNSUPPORTED_CREATE_ERROR, UNSUPPORTED_CREATE_TITLE, COPY_FILE_TO_SAME_LOCATION_ERROR } from '../utils/message';
 
 // Template for an empty Directory IModel.
 const DIRECTORY_IMODEL: Contents.IModel = {
@@ -670,6 +670,17 @@ export class GCSDrive implements Contents.IDrive {
     const oldPath = GcsService.pathParser(path);
     const newPath = GcsService.pathParser(newLocalPath);
 
+    if( newPath.path === '') {
+      // In the rename operation, it is not possible to get empty path from jupyter.
+      // Only while user performs cut/paste operation, it is possible to get empty path.
+      await showDialog({
+        title: PASTE_BUCKET_TITLE,
+        body: PASTE_BUCKET_ERROR_MESSAGE,
+        buttons: [Dialog.okButton()]
+      });
+      return DIRECTORY_IMODEL;
+    }
+
     const oldName = path.split('/').pop() ?? '';
     const isOldPathMeetsFilename =
       oldName.includes('.') && oldName.lastIndexOf('.') > 0;
@@ -719,7 +730,7 @@ export class GCSDrive implements Contents.IDrive {
           newPath: newPath.path
         });
 
-        if (response.status === 200) {
+        if (response?.status === 200) {
           await GcsService.deleteFile({
             bucket: oldPath.bucket,
             path: oldPath.path
@@ -765,7 +776,7 @@ export class GCSDrive implements Contents.IDrive {
         } else {
           await showDialog({
             title: RENAME_ERROR_TITLE,
-            body: response.error,
+            body: response?.error,
             buttons: [Dialog.okButton()]
           });
           return DIRECTORY_IMODEL;
@@ -845,11 +856,31 @@ export class GCSDrive implements Contents.IDrive {
   async copy(localPath: string, toLocalDir: string): Promise<Contents.IModel> {
     this._browserWidget?.showProgressBar();
     try {
+
+      if( toLocalDir === '') {
+      // empty path means user is trying to paste at bucket level.
+      await showDialog({
+        title: PASTE_BUCKET_TITLE,
+        body: PASTE_BUCKET_ERROR_MESSAGE,
+        buttons: [Dialog.okButton()]
+      });
+      return DIRECTORY_IMODEL;
+    }
+
       const parsedSource = GcsService.pathParser(localPath);
       const parsedDestinationDir = GcsService.pathParser(toLocalDir);
 
       const sourceName = localPath.split('/').pop() ?? '';
-      const isSourceFile = sourceName.includes('.') && sourceName.lastIndexOf('.') > 0;
+
+      const expectedDestinationPath = `${toLocalDir}/${sourceName}`;
+      if (localPath === expectedDestinationPath) {
+          await showDialog({
+              title: COPY_ERROR_TITLE,
+              body: COPY_FILE_TO_SAME_LOCATION_ERROR,
+              buttons: [Dialog.okButton()]
+          });
+          return DIRECTORY_IMODEL;
+      }
 
       let newFullPathInDestination: string;
       let copiedModel: Contents.IModel;
@@ -858,28 +889,7 @@ export class GCSDrive implements Contents.IDrive {
 
       newFullPathInDestination = `${parsedDestinationDir.bucket}/${parsedDestinationDir.path}/${sourceName}`;
 
-      const content = await GcsService.listFiles({
-        prefix: `${parsedDestinationDir.path}/${sourceName}`,
-        bucket: parsedDestinationDir.bucket
-      });
-
-      if (content.files && content.files.length > 0) {
-        await showDialog({
-          title: COPY_ERROR_TITLE,
-          body: COPY_FILE_EXISTS_ERROR,
-          buttons: [Dialog.okButton()]
-        });
-        return DIRECTORY_IMODEL;
-      }else if (content.prefixes && content.prefixes.length > 0) {
-        await showDialog({
-          title: COPY_ERROR_TITLE,
-          body: COPY_FOLDER_EXISTS_ERROR,
-          buttons: [Dialog.okButton()]
-        });
-        return DIRECTORY_IMODEL;
-      }
-      else{
-        await GcsService.copyFile({
+      const response = await GcsService.copyFile({
           sourceBucket: parsedSource.bucket,
           sourcePath: sourceGcsPath,
           destinationBucket: parsedDestinationDir.bucket,
@@ -887,7 +897,7 @@ export class GCSDrive implements Contents.IDrive {
         });
 
         // Construct the IModel for the newly copied item
-        copiedModel = this.ModelObject(newFullPathInDestination, !isSourceFile);
+        copiedModel = this.ModelObject(newFullPathInDestination, response.isFolder? response.isFolder : false);
 
         this._fileChanged.emit({
           type: 'new', // Indicate that a new item has been created
@@ -896,12 +906,12 @@ export class GCSDrive implements Contents.IDrive {
         });
 
         return copiedModel;
-      }
 
     } catch (error: any) {
+
       await showDialog({
         title: COPY_ERROR_TITLE,
-        body: `Failed to copy: ${error.message || 'An unknown error occurred.'}`,
+        body: `${error.message || 'An unknown error occurred.'}`,
         buttons: [Dialog.okButton()]
       });
       // Return a default value to satisfy the return type

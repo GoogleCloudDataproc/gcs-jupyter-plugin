@@ -27,7 +27,7 @@ import { GcsService } from './gcsService';
 import { GCSDrive } from './gcsDrive';
 import { TitleWidget } from '../controls/SidePanelTitleWidget';
 import { ProgressBarWidget } from './ProgressBarWidget';
-import { authApi, IAuthCredentials, login } from '../utils/utils';
+import { authApi, login } from '../utils/utils';
 import { Message } from '@lumino/messaging';
 
 import {
@@ -74,8 +74,7 @@ export class GcsBrowserWidget extends Widget {
   constructor(
     drive: GCSDrive,
     browser: FileBrowser,
-    themeManager: IThemeManager,
-    credentials:  IAuthCredentials | undefined
+    themeManager: IThemeManager
   ) {
     super();
 
@@ -83,75 +82,73 @@ export class GcsBrowserWidget extends Widget {
     this._themeManager = themeManager;
 
     this._browser.showLastModifiedColumn = false;
-    this._browser.showFileFilter = true;
+    this._browser.showFileFilter = false;
     this._browser.showHiddenFiles = true;
 
-    if (!credentials?.login_error && !credentials?.config_error) {
-      // Create an empty panel layout initially
-      this.layout = new PanelLayout();
-      this.node.style.height = '100%';
-      this.node.style.display = 'flex';
-      this.node.style.flexDirection = 'column';
+    // Create an empty panel layout initially
+    this.layout = new PanelLayout();
+    this.node.style.height = '100%';
+    this.node.style.display = 'flex';
+    this.node.style.flexDirection = 'column';
 
-      this._browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
-      this._browser.node.style.flexShrink = '1';
-      this._browser.node.style.flexGrow = '1';
+    this._browser.node.style.overflowY = 'auto'; // Ensure vertical scrolling is enabled if needed
+    this._browser.node.style.flexShrink = '1';
+    this._browser.node.style.flexGrow = '1';
 
-      // Title widget for the GCS Browser
-      this._titleWidget = new TitleWidget(GCS_PLUGIN_TITLE, false);
-      (this.layout as PanelLayout).addWidget(this._titleWidget);
+    // Title widget for the GCS Browser
+    this._titleWidget = new TitleWidget(GCS_PLUGIN_TITLE, false);
+    (this.layout as PanelLayout).addWidget(this._titleWidget);
 
-      this._progressBarWidget = new ProgressBarWidget();
-      (this.layout as PanelLayout).addWidget(this._progressBarWidget);
+    this._progressBarWidget = new ProgressBarWidget();
+    (this.layout as PanelLayout).addWidget(this._progressBarWidget);
 
-      // Listen for changes in the FileBrowser's path
-      this._browser.model.pathChanged.connect(this.onPathChanged, this);
+    // Listen for changes in the FileBrowser's path
+    this._browser.model.pathChanged.connect(this.onPathChanged, this);
 
-      const originalCd = this._browser.model.cd;
-      this._browser.model.cd = async (path: string) => {
-        this.showProgressBar();
-        try {
-          const result = await originalCd.call(this._browser.model, path);
-          return result;
-        } finally {
-          this.hideProgressBar();
-        }
-      };
+    const originalCd = this._browser.model.cd;
+    this._browser.model.cd = async (path: string) => {
+      this.showProgressBar();
+      try {
+        const result = await originalCd.call(this._browser.model, path);
+        return result;
+      } finally {
+        this.hideProgressBar();
+      }
+    };
 
-      this._browser.showFileCheckboxes = false;
-      (this.layout as PanelLayout).addWidget(this._browser);
-      this._browser.node.style.flexShrink = '1';
-      this._browser.node.style.flexGrow = '1';
+    this._browser.showFileCheckboxes = false;
+    (this.layout as PanelLayout).addWidget(this._browser);
+    this._browser.node.style.flexShrink = '1';
+    this._browser.node.style.flexGrow = '1';
 
-      // Create a file input element
-      this.fileInput = document.createElement('input');
-      this.fileInput.type = 'file';
-      this.fileInput.multiple = true; // Enable multiple file selection
-      this.fileInput.style.display = 'none';
+    // Create a file input element
+    this.fileInput = document.createElement('input');
+    this.fileInput.type = 'file';
+    this.fileInput.multiple = true; // Enable multiple file selection
+    this.fileInput.style.display = 'none';
 
-      // Attach event listener for file selection
-      this.fileInput.addEventListener('change', this.handleFileUpload);
+    // Attach event listener for file selection
+    this.fileInput.addEventListener('change', this.handleFileUpload);
 
-      // Append the file input element to the widget's node
-      this.node.appendChild(this.fileInput);
+    // Append the file input element to the widget's node
+    this.node.appendChild(this.fileInput);
 
-      this.newFolder = this.createNewFolderButton(true);
-      this.gcsUpload = this.createUploadButton(true);
-      this.refreshButton = this.createRefreshButton(true);
-      this.toggleFileFilter = this.createToggleFileFilterButton(true);
+    this.newFolder = this.createNewFolderButton(true);
+    this.gcsUpload = this.createUploadButton(true);
+    this.refreshButton = this.createRefreshButton(true);
+    this.toggleFileFilter = this.createToggleFileFilterButton(true);
 
-      // Since the default location is root. disabling upload and new folder buttons
-      this.newFolder.enabled = false;
-      this.gcsUpload.enabled = false;
+    // Since the default location is root. disabling upload and new folder buttons
+    this.newFolder.enabled = false;
+    this.gcsUpload.enabled = false;
 
-      this._browser.toolbar.addItem(NEW_FOLDER, this.newFolder);
-      this._browser.toolbar.addItem(FILE_UPLOAD, this.gcsUpload);
-      this._browser.toolbar.addItem(REFRESH, this.refreshButton);
-      this._browser.toolbar.addItem(TOGGLE_FILE_FILTER, this.toggleFileFilter);
+    this._browser.toolbar.addItem(NEW_FOLDER, this.newFolder);
+    this._browser.toolbar.addItem(FILE_UPLOAD, this.gcsUpload);
+    this._browser.toolbar.addItem(REFRESH, this.refreshButton);
+    this._browser.toolbar.addItem(TOGGLE_FILE_FILTER, this.toggleFileFilter);
 
-      this._themeManager.themeChanged.connect(this.onThemeChanged, this);
-      this.onThemeChanged();
-    }
+    this._themeManager.themeChanged.connect(this.onThemeChanged, this);
+    this.onThemeChanged();
   }
 
   protected onAfterAttach(msg: Message): void {
@@ -159,6 +156,7 @@ export class GcsBrowserWidget extends Widget {
     // Call initialize asynchronously after widget is attached
     void this.initialize();
   }
+
 
   private createNewFolderButton(isLight: boolean): ToolbarButton {
     return new ToolbarButton({
@@ -360,65 +358,70 @@ export class GcsBrowserWidget extends Widget {
   private async initialize(): Promise<void> {
     try {
       const credentials = await authApi();
-      const errorMessageNode = document.createElement('div');
-      errorMessageNode.className = 'gcs-error-message';
-      errorMessageNode.style.textAlign = 'center';
-      errorMessageNode.style.marginTop = '20px';
-      errorMessageNode.style.alignItems = 'center';
-      errorMessageNode.style.justifyContent = 'center';
-      errorMessageNode.style.display = 'flex';
-      errorMessageNode.style.flexDirection = 'column';
-      errorMessageNode.style.fontSize = '15px';
-      errorMessageNode.style.fontWeight = '600';
-      errorMessageNode.style.padding = '11px';
+      if (credentials?.login_error || credentials?.config_error) {
 
-      if (credentials) {
-        if (credentials?.config_error === 1) {
-          // Config error
-          errorMessageNode.textContent = GCLOUD_CONFIG_ERROR;
-          this.node.appendChild(errorMessageNode);
-          return;
-        }
+        this._browser.hide();
 
-        if (credentials.login_error === 1) {
-          // Login error
-          const loginContainer = document.createElement('div');
-          loginContainer.style.display = 'flex';
-          loginContainer.style.flexDirection = 'column';
-          loginContainer.style.alignItems = 'center';
-          loginContainer.style.marginTop = '20px';
-          loginContainer.style.justifyContent = 'center';
-          loginContainer.style.fontSize = '15px';
-          loginContainer.style.fontWeight = '600';
-          loginContainer.style.padding = '11px';
+        const errorMessageNode = document.createElement('div');
+        errorMessageNode.className = 'gcs-error-message';
+        errorMessageNode.style.textAlign = 'center';
+        errorMessageNode.style.marginTop = '20px';
+        errorMessageNode.style.alignItems = 'center';
+        errorMessageNode.style.justifyContent = 'center';
+        errorMessageNode.style.display = 'flex';
+        errorMessageNode.style.flexDirection = 'column';
+        errorMessageNode.style.fontSize = '15px';
+        errorMessageNode.style.fontWeight = '600';
+        errorMessageNode.style.padding = '11px';
 
-          const loginText = document.createElement('div');
-          loginText.className = 'login-error';
-          loginText.textContent = 'Please login to continue';
+        if (credentials) {
+          if (credentials?.config_error === 1) {
+            // Config error
+            errorMessageNode.textContent = GCLOUD_CONFIG_ERROR;
+            this.node.appendChild(errorMessageNode);
+            return;
+          }
 
-          const loginButton = document.createElement('div');
-          loginButton.className = 'signin-google-icon logo-alignment-style';
-          loginButton.setAttribute('role', 'button');
-          loginButton.style.cursor = 'pointer';
+          if (credentials.login_error === 1) {
+            // Login error
+            const loginContainer = document.createElement('div');
+            loginContainer.style.display = 'flex';
+            loginContainer.style.flexDirection = 'column';
+            loginContainer.style.alignItems = 'center';
+            loginContainer.style.marginTop = '20px';
+            loginContainer.style.justifyContent = 'center';
+            loginContainer.style.fontSize = '15px';
+            loginContainer.style.fontWeight = '600';
+            loginContainer.style.padding = '11px';
 
-          loginButton.onclick = () => {
-            // Assuming `login` is globally available
-            login((value: boolean | ((prevState: boolean) => boolean)) => {
-              if (typeof value === 'boolean' && !value) {
-                // Retry initialization after successful login
-                this.initialize();
-              }
-            });
-          };
+            const loginText = document.createElement('div');
+            loginText.className = 'login-error';
+            loginText.textContent = 'Please login to continue';
 
-          const googleIconContainer = document.createElement('div');
-          googleIconContainer.style.marginTop = '20px';
-          googleIconContainer.innerHTML = iconSigninGoogle.svgstr;
-          loginButton.appendChild(googleIconContainer);
-          loginContainer.appendChild(loginText);
-          loginContainer.appendChild(loginButton);
-          this.node.appendChild(loginContainer);
-          return;
+            const loginButton = document.createElement('div');
+            loginButton.className = 'signin-google-icon logo-alignment-style';
+            loginButton.setAttribute('role', 'button');
+            loginButton.style.cursor = 'pointer';
+
+            loginButton.onclick = () => {
+              // Assuming `login` is globally available
+              login((value: boolean | ((prevState: boolean) => boolean)) => {
+                if (typeof value === 'boolean' && !value) {
+                  // Retry initialization after successful login
+                  this.initialize();
+                }
+              });
+            };
+
+            const googleIconContainer = document.createElement('div');
+            googleIconContainer.style.marginTop = '20px';
+            googleIconContainer.innerHTML = iconSigninGoogle.svgstr;
+            loginButton.appendChild(googleIconContainer);
+            loginContainer.appendChild(loginText);
+            loginContainer.appendChild(loginButton);
+            this.node.appendChild(loginContainer);
+            return;
+          }
         }
       }
     } catch (error) {

@@ -48,6 +48,28 @@ export async function requestAPI<T>(
   const contentType = response.headers.get('Content-Type');
 
   if (!response.ok) {
+    // If the response is not ok, throw an error with the response status
+    let errorData = undefined
+    if (rawResponseText) {
+      try {
+        errorData = JSON.parse(rawResponseText);
+      } catch (parseError) {
+        console.warn('Parse Error Occurred: ' + parseError);
+        throw new ServerConnection.ResponseError(
+          response,
+          `API request failed with status ${response.status}: ${response.statusText}`,
+          response.status+""
+        );
+      }
+      if (errorData?.error) {
+          throw new ServerConnection.ResponseError(
+            response,
+            errorData.error,
+            errorData.status || response.status
+          );
+        }
+    }
+    // If no error message is found, throw a generic error
     throw new ServerConnection.ResponseError(response, `API request failed with status ${response.status}: ${response.statusText}`);
   }
 
