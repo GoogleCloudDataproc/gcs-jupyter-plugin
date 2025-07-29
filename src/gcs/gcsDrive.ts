@@ -25,8 +25,41 @@ import mime from 'mime-types';
 
 import { JupyterFrontEnd } from '@jupyterlab/application';
 import { GcsBrowserWidget } from './gcsBrowserWidget';
-import {  DELETE_SIGNAL, DIRECTORY, FILE, GCS_PLUGIN_TITLE, NOTEBOOK, RENAME_SIGNAL, UNTITLED_DIRECTORY_NAME, UNTITLED_FILE_EXT, UNTITLED_FILE_NAME, UNTITLED_NOTEBOOK_EXT, UNTITLED_NOTEBOOK_NAME } from '../utils/const';
-import { COPY_ERROR_TITLE, BUCKET_LEVEL_FILE_CREATION_MESSAGE, BUCKET_LEVEL_FOLDER_CREATION_MESSAGE, BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE, BUCKET_RENAME_ERROR, DELETION_ERROR_TITLE, FILE_CREATION_ERROR_TITLE, FOLDER_CREATION_ERROR_TITLE, INVALID_FILE_NAME_ERROR, NAME_EXCEEDS_MAX_LENGTH_ERROR, NO_DATA_PROVIDED_ERROR, NOTEBOOK_CREATION_ERROR_TITLE, NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE, OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE, PASTE_BUCKET_ERROR_MESSAGE, PASTE_BUCKET_TITLE, RENAME_ERROR_TITLE, UNSUPPORTED_CREATE_ERROR, UNSUPPORTED_CREATE_TITLE, COPY_FILE_TO_SAME_LOCATION_ERROR } from '../utils/message';
+import {
+  DELETE_SIGNAL,
+  DIRECTORY,
+  FILE,
+  GCS_PLUGIN_TITLE,
+  NOTEBOOK,
+  RENAME_SIGNAL,
+  UNTITLED_DIRECTORY_NAME,
+  UNTITLED_FILE_EXT,
+  UNTITLED_FILE_NAME,
+  UNTITLED_NOTEBOOK_EXT,
+  UNTITLED_NOTEBOOK_NAME
+} from '../utils/const';
+import {
+  COPY_ERROR_TITLE,
+  BUCKET_LEVEL_FILE_CREATION_MESSAGE,
+  BUCKET_LEVEL_FOLDER_CREATION_MESSAGE,
+  BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE,
+  BUCKET_RENAME_ERROR,
+  DELETION_ERROR_TITLE,
+  FILE_CREATION_ERROR_TITLE,
+  FOLDER_CREATION_ERROR_TITLE,
+  INVALID_FILE_NAME_ERROR,
+  NAME_EXCEEDS_MAX_LENGTH_ERROR,
+  NO_DATA_PROVIDED_ERROR,
+  NOTEBOOK_CREATION_ERROR_TITLE,
+  NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE,
+  OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE,
+  PASTE_BUCKET_ERROR_MESSAGE,
+  PASTE_BUCKET_TITLE,
+  RENAME_ERROR_TITLE,
+  UNSUPPORTED_CREATE_ERROR,
+  UNSUPPORTED_CREATE_TITLE,
+  COPY_FILE_TO_SAME_LOCATION_ERROR
+} from '../utils/message';
 
 // Template for an empty Directory IModel.
 const DIRECTORY_IMODEL: Contents.IModel = {
@@ -161,7 +194,7 @@ export class GCSDrive implements Contents.IDrive {
     const content = await GcsService.listBuckets();
 
     if (!content) {
-      throw  new Error(`Error Listing Buckets ${content}`);
+      throw new Error(`Error Listing Buckets ${content}`);
     }
     return {
       ...DIRECTORY_IMODEL,
@@ -279,7 +312,7 @@ export class GCSDrive implements Contents.IDrive {
   async newUntitled(
     options?: Contents.ICreateOptions
   ): Promise<Contents.IModel> {
-    if(this.selected_panel !== GCS_PLUGIN_TITLE) {
+    if (this.selected_panel !== GCS_PLUGIN_TITLE) {
       return Promise.reject(new Error(NOTEBOOK_CREATION_GCS_CONTEXT_MESSAGE));
     }
     if (!options) {
@@ -301,7 +334,9 @@ export class GCSDrive implements Contents.IDrive {
         });
         return Promise.reject();
       } else if (options.type === NOTEBOOK) {
-        return Promise.reject(new Error(BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE));
+        return Promise.reject(
+          new Error(BUCKET_LEVEL_NOTEBOOK_CREATION_MESSAGE)
+        );
       } else {
         await showDialog({
           title: UNSUPPORTED_CREATE_TITLE,
@@ -315,9 +350,7 @@ export class GCSDrive implements Contents.IDrive {
     const localPath = typeof options?.path === 'string' ? options?.path : '';
 
     if (localPath === '/' || localPath === '') {
-      console.error(
-        OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE
-      );
+      console.error(OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE);
       return Promise.reject(new Error(OBJECT_CREATION_AT_ROOT_ERROR_MESSAGE));
     }
 
@@ -662,6 +695,15 @@ export class GCSDrive implements Contents.IDrive {
     }
   }
 
+  private async _preventRootLevelPaste(): Promise<Contents.IModel> {
+    await showDialog({
+      title: PASTE_BUCKET_TITLE,
+      body: PASTE_BUCKET_ERROR_MESSAGE,
+      buttons: [Dialog.okButton()]
+    });
+    return DIRECTORY_IMODEL;
+  }
+
   async rename(
     path: string,
     newLocalPath: string,
@@ -670,15 +712,10 @@ export class GCSDrive implements Contents.IDrive {
     const oldPath = GcsService.pathParser(path);
     const newPath = GcsService.pathParser(newLocalPath);
 
-    if( newPath.path === '') {
+    if (newPath.path === '') {
       // In the rename operation, it is not possible to get empty path from jupyter.
       // Only while user performs cut/paste operation, it is possible to get empty path.
-      await showDialog({
-        title: PASTE_BUCKET_TITLE,
-        body: PASTE_BUCKET_ERROR_MESSAGE,
-        buttons: [Dialog.okButton()]
-      });
-      return DIRECTORY_IMODEL;
+      return this._preventRootLevelPaste();
     }
 
     const oldName = path.split('/').pop() ?? '';
@@ -718,7 +755,9 @@ export class GCSDrive implements Contents.IDrive {
       try {
         this._browserWidget?.showProgressBar();
 
-        if (oldPath.path.includes(UNTITLED_DIRECTORY_NAME + untitledFolderSuffix)) {
+        if (
+          oldPath.path.includes(UNTITLED_DIRECTORY_NAME + untitledFolderSuffix)
+        ) {
           oldPath.path = oldPath.path + '/';
           newPath.path = newPath.path + '/';
           path = path + '/';
@@ -741,8 +780,8 @@ export class GCSDrive implements Contents.IDrive {
             this._fileChanged.emit({
               type: RENAME_SIGNAL,
               // Creating Model Obj for Both Source and Destination (renamed)
-              oldValue: this.ModelObject(path,isOldPathMeetsFilename),
-              newValue: this.ModelObject(newLocalPath,isNewPathMeetsFilename)
+              oldValue: this.ModelObject(path, isOldPathMeetsFilename),
+              newValue: this.ModelObject(newLocalPath, isNewPathMeetsFilename)
             });
 
             return {
@@ -800,7 +839,7 @@ export class GCSDrive implements Contents.IDrive {
       last_modified: now,
       content: null,
       format: isPathMeetsFileName ? 'text' : null,
-      mimetype: '',
+      mimetype: ''
     };
   }
 
@@ -851,21 +890,13 @@ export class GCSDrive implements Contents.IDrive {
     );
   }
 
-
-
   async copy(localPath: string, toLocalDir: string): Promise<Contents.IModel> {
     this._browserWidget?.showProgressBar();
     try {
-
-      if( toLocalDir === '') {
-      // empty path means user is trying to paste at bucket level.
-      await showDialog({
-        title: PASTE_BUCKET_TITLE,
-        body: PASTE_BUCKET_ERROR_MESSAGE,
-        buttons: [Dialog.okButton()]
-      });
-      return DIRECTORY_IMODEL;
-    }
+      if (toLocalDir === '') {
+        // empty path means user is trying to paste at bucket level.
+        return this._preventRootLevelPaste();
+      }
 
       const parsedSource = GcsService.pathParser(localPath);
       const parsedDestinationDir = GcsService.pathParser(toLocalDir);
@@ -874,12 +905,12 @@ export class GCSDrive implements Contents.IDrive {
 
       const expectedDestinationPath = `${toLocalDir}/${sourceName}`;
       if (localPath === expectedDestinationPath) {
-          await showDialog({
-              title: COPY_ERROR_TITLE,
-              body: COPY_FILE_TO_SAME_LOCATION_ERROR,
-              buttons: [Dialog.okButton()]
-          });
-          return DIRECTORY_IMODEL;
+        await showDialog({
+          title: COPY_ERROR_TITLE,
+          body: COPY_FILE_TO_SAME_LOCATION_ERROR,
+          buttons: [Dialog.okButton()]
+        });
+        return DIRECTORY_IMODEL;
       }
 
       let newFullPathInDestination: string;
@@ -890,25 +921,26 @@ export class GCSDrive implements Contents.IDrive {
       newFullPathInDestination = `${parsedDestinationDir.bucket}/${parsedDestinationDir.path}/${sourceName}`;
 
       const response = await GcsService.copyFile({
-          sourceBucket: parsedSource.bucket,
-          sourcePath: sourceGcsPath,
-          destinationBucket: parsedDestinationDir.bucket,
-          destinationPath: `${parsedDestinationDir.path}/${sourceName}`
-        });
+        sourceBucket: parsedSource.bucket,
+        sourcePath: sourceGcsPath,
+        destinationBucket: parsedDestinationDir.bucket,
+        destinationPath: `${parsedDestinationDir.path}/${sourceName}`
+      });
 
-        // Construct the IModel for the newly copied item
-        copiedModel = this.ModelObject(newFullPathInDestination, response.isFolder? response.isFolder : false);
+      // Construct the IModel for the newly copied item
+      copiedModel = this.ModelObject(
+        newFullPathInDestination,
+        response.isFolder
+      );
 
-        this._fileChanged.emit({
-          type: 'new', // Indicate that a new item has been created
-          oldValue: null,
-          newValue: copiedModel
-        });
+      this._fileChanged.emit({
+        type: 'new', // Indicate that a new item has been created
+        oldValue: null,
+        newValue: copiedModel
+      });
 
-        return copiedModel;
-
+      return copiedModel;
     } catch (error: any) {
-
       await showDialog({
         title: COPY_ERROR_TITLE,
         body: `${error.message || 'An unknown error occurred.'}`,
