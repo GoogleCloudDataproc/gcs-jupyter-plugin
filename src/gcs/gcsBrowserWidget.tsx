@@ -157,7 +157,6 @@ export class GcsBrowserWidget extends Widget {
     void this.initialize();
   }
 
-
   private createNewFolderButton(isLight: boolean): ToolbarButton {
     return new ToolbarButton({
       icon: isLight ? iconGCSNewFolder : iconGCSNewFolderDark,
@@ -359,49 +358,24 @@ export class GcsBrowserWidget extends Widget {
     try {
       const credentials = await authApi();
       if (credentials?.login_error || credentials?.config_error) {
-
         this._browser.hide();
 
-        const errorMessageNode = document.createElement('div');
-        errorMessageNode.className = 'gcs-error-message';
-        errorMessageNode.style.textAlign = 'center';
-        errorMessageNode.style.marginTop = '20px';
-        errorMessageNode.style.alignItems = 'center';
-        errorMessageNode.style.justifyContent = 'center';
-        errorMessageNode.style.display = 'flex';
-        errorMessageNode.style.flexDirection = 'column';
-        errorMessageNode.style.fontSize = '15px';
-        errorMessageNode.style.fontWeight = '600';
-        errorMessageNode.style.padding = '11px';
-
         if (credentials) {
-          if (credentials?.config_error === 1) {
+          if (credentials.config_error === 1) {
             // Config error
-            errorMessageNode.textContent = GCLOUD_CONFIG_ERROR;
+            const errorMessageNode =
+              this.createErrorContainer(GCLOUD_CONFIG_ERROR);
             this.node.appendChild(errorMessageNode);
             return;
           }
 
           if (credentials.login_error === 1) {
             // Login error
-            const loginContainer = document.createElement('div');
-            loginContainer.style.display = 'flex';
-            loginContainer.style.flexDirection = 'column';
-            loginContainer.style.alignItems = 'center';
-            loginContainer.style.marginTop = '20px';
-            loginContainer.style.justifyContent = 'center';
-            loginContainer.style.fontSize = '15px';
-            loginContainer.style.fontWeight = '600';
-            loginContainer.style.padding = '11px';
+            const loginContainer = this.createErrorContainer();
 
-            const loginText = document.createElement('div');
-            loginText.className = 'login-error';
-            loginText.textContent = 'Please login to continue';
+            const loginText = this._createLoginErrorTextElement();
 
-            const loginButton = document.createElement('div');
-            loginButton.className = 'signin-google-icon logo-alignment-style';
-            loginButton.setAttribute('role', 'button');
-            loginButton.style.cursor = 'pointer';
+            const loginButton = this._createLoginButton();
 
             loginButton.onclick = () => {
               // Assuming `login` is globally available
@@ -413,10 +387,7 @@ export class GcsBrowserWidget extends Widget {
               });
             };
 
-            const googleIconContainer = document.createElement('div');
-            googleIconContainer.style.marginTop = '20px';
-            googleIconContainer.innerHTML = iconSigninGoogle.svgstr;
-            loginButton.appendChild(googleIconContainer);
+            loginContainer.appendChild(this._createGoogleIconContainer());
             loginContainer.appendChild(loginText);
             loginContainer.appendChild(loginButton);
             this.node.appendChild(loginContainer);
@@ -427,6 +398,48 @@ export class GcsBrowserWidget extends Widget {
     } catch (error) {
       console.error('Error during initialization:', error);
     }
+  }
+
+  private createErrorContainer(text?: string): HTMLDivElement {
+    const container = document.createElement('div');
+    container.className = 'gcs-error-message'; // Can keep this class or make it more generic
+    container.style.textAlign = 'center';
+    container.style.marginTop = '20px';
+    container.style.alignItems = 'center';
+    container.style.justifyContent = 'center';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.fontSize = '15px';
+    container.style.fontWeight = '600';
+    container.style.padding = '11px';
+
+    if (text) {
+      container.textContent = text;
+    }
+
+    return container;
+  }
+
+  private _createLoginErrorTextElement(): HTMLDivElement {
+    const loginText = document.createElement('div');
+    loginText.className = 'login-error';
+    loginText.textContent = 'Please login to continue';
+    return loginText;
+  }
+
+  private _createGoogleIconContainer(): HTMLDivElement {
+    const googleIconContainer = document.createElement('div');
+    googleIconContainer.style.marginTop = '20px';
+    googleIconContainer.innerHTML = iconSigninGoogle.svgstr;
+    return googleIconContainer;
+  }
+
+  private _createLoginButton(): HTMLDivElement {
+    const loginButton = document.createElement('div');
+    loginButton.className = 'signin-google-icon logo-alignment-style';
+    loginButton.setAttribute('role', 'button');
+    loginButton.style.cursor = 'pointer';
+    return loginButton;
   }
 
   public async refreshContents() {

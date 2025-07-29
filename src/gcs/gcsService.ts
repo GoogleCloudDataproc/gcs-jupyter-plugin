@@ -17,7 +17,16 @@
 
 import { requestAPI } from '../handler';
 import { showDialog, Dialog } from '@jupyterlab/apputils';
-import { COPY_ENDPOINT, CREATE_FOLDER_ENDPOINT, DELETE_ENDPOINT, LIST_BUCKETS_ENDPOINT, LIST_FILES_ENDPOINT, LOAD_FILE_ENDPOINT, RENAME_ENDPOINT, SAVE_ENDPOINT } from '../utils/const';
+import {
+  COPY_ENDPOINT,
+  CREATE_FOLDER_ENDPOINT,
+  DELETE_ENDPOINT,
+  LIST_BUCKETS_ENDPOINT,
+  LIST_FILES_ENDPOINT,
+  LOAD_FILE_ENDPOINT,
+  RENAME_ENDPOINT,
+  SAVE_ENDPOINT
+} from '../utils/const';
 
 export class GcsService {
   /**
@@ -53,7 +62,7 @@ export class GcsService {
    * @see https://cloud.google.com/storage/docs/listing-buckets#rest-list-buckets
    */
   static async listBuckets() {
-    try{
+    try {
       const data = (await requestAPI(LIST_BUCKETS_ENDPOINT)) as any;
       return data;
     } catch (error: any) {
@@ -92,15 +101,14 @@ export class GcsService {
     path: string;
     format: 'text' | 'json' | 'base64';
   }): Promise<string> {
-
-    const data = await requestAPI(LOAD_FILE_ENDPOINT, {
+    const data = (await requestAPI(LOAD_FILE_ENDPOINT, {
       method: 'POST',
       body: JSON.stringify({
         bucket,
         path,
         format
       })
-    }) as any;
+    })) as any;
 
     return data;
   }
@@ -170,7 +178,11 @@ export class GcsService {
   static async deleteFile({ bucket, path }: { bucket: string; path: string }) {
     try {
       const response: { status?: number; error?: string } = await requestAPI(
-        DELETE_ENDPOINT + '?bucket=' + encodeURIComponent(bucket) + '&path=' + encodeURIComponent(path),
+        DELETE_ENDPOINT +
+          '?bucket=' +
+          encodeURIComponent(bucket) +
+          '&path=' +
+          encodeURIComponent(path),
         {
           method: 'DELETE'
         }
@@ -241,21 +253,18 @@ export class GcsService {
     destinationBucket: string;
     destinationPath: string;
   }) {
-    
-      const response: { status?: number; isFolder?: boolean; error?: string; } = await requestAPI(
-        COPY_ENDPOINT,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            sourceBucket,
-            sourcePath,
-            destinationBucket,
-            destinationPath
-          })
-        }
-      );
+    const response: { status?: number; isFolder: boolean; error?: string } =
+      await requestAPI(COPY_ENDPOINT, {
+        method: 'POST',
+        body: JSON.stringify({
+          sourceBucket,
+          sourcePath,
+          destinationBucket,
+          destinationPath
+        })
+      });
 
-      return response;
+    return response;
   }
 
   /**
@@ -273,8 +282,7 @@ export class GcsService {
     name: string;
     format: 'text' | 'json' | 'base64';
   }): Promise<string> {
-
-    const response = await requestAPI(LOAD_FILE_ENDPOINT, {
+    const response = (await requestAPI(LOAD_FILE_ENDPOINT, {
       method: 'POST',
       body: JSON.stringify({
         bucket,
@@ -282,7 +290,7 @@ export class GcsService {
         name,
         format
       })
-    }) as any;
+    })) as any;
 
     return response;
   }

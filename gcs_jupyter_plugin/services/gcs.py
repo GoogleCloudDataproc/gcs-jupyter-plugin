@@ -172,8 +172,8 @@ class Client(tornado.web.RequestHandler):
             client = storage.Client(project=project, credentials=creds)
 
             # Format the folder path
-            new_folder_path = str(pathlib.PosixPath(path).joinpath(folder_name))+"/"
-            
+            new_folder_path = str(pathlib.PosixPath(path).joinpath(folder_name)) + "/"
+
             self.log.info(f"Creating folder at: {new_folder_path}")
 
             # Get the bucket
@@ -228,8 +228,8 @@ class Client(tornado.web.RequestHandler):
                 processed_content = content
             elif isinstance(content, dict):
                 processed_content = json.dumps(content)
-            elif isinstance(content, str) and content.startswith('data:'):
-                data_url_match = re.match(r'data:([^;]+);base64,(.*)', content)
+            elif isinstance(content, str) and content.startswith("data:"):
+                data_url_match = re.match(r"data:([^;]+);base64,(.*)", content)
                 if data_url_match:
                     base64_data = data_url_match.group(2)
                     processed_content = base64.b64decode(base64_data)
@@ -513,7 +513,7 @@ class Client(tornado.web.RequestHandler):
 
                 new_blob = bucket.copy_blob(blob, bucket, new_name=new_blob_name)
                 renamed_blobs.append(new_blob)
-                blob.delete() 
+                blob.delete()
 
             return {
                 "message": f"Folder '{source_prefix}' and its contents renamed to '{new_prefix}'.",
@@ -544,8 +544,10 @@ class Client(tornado.web.RequestHandler):
                 "error": f"Failed to rename folder: {str(e)}",
                 "status": 500,
             }
-            
-    async def copy_file(self, source_bucket_name, source_path, destination_bucket_name, destination_path):
+
+    async def copy_file(
+        self, source_bucket_name, source_path, destination_bucket_name, destination_path
+    ):
         """Copies a blob from one bucket to another, or within the same bucket.
         Can also copy a folder (all blobs with a given prefix).
         """
@@ -554,31 +556,48 @@ class Client(tornado.web.RequestHandler):
             project = self.project_id
             creds = credentials.Credentials(token)
             storage_client = storage.Client(project=project, credentials=creds)
-            
+
             source_bucket = storage_client.bucket(source_bucket_name)
             destination_bucket = storage_client.bucket(destination_bucket_name)
-            
-            if destination_path.startswith('/'):
+
+            if destination_path.startswith("/"):
                 destination_path = destination_path[1:]
 
             source_blob = source_bucket.blob(source_path)
 
             is_folder = False
             # Check if source_path is a folder by checking for objects with its prefix
-            blobs_under_source_prefix = list(source_bucket.list_blobs(prefix=source_path + "/"))
-            if blobs_under_source_prefix or (source_blob.exists() and source_blob.size == 0 and source_blob.name.endswith('/')):
+            blobs_under_source_prefix = list(
+                source_bucket.list_blobs(prefix=source_path + "/")
+            )
+            if blobs_under_source_prefix or (
+                source_blob.exists()
+                and source_blob.size == 0
+                and source_blob.name.endswith("/")
+            ):
                 is_folder = True
-                
+
             if is_folder:
                 # folder copy
-                source_prefix_normalized = source_path if source_path.endswith('/') else source_path + '/'
-                destination_prefix_normalized = destination_path if destination_path.endswith('/') else destination_path + '/'
+                source_prefix_normalized = (
+                    source_path if source_path.endswith("/") else source_path + "/"
+                )
+                destination_prefix_normalized = (
+                    destination_path
+                    if destination_path.endswith("/")
+                    else destination_path + "/"
+                )
 
-                if source_bucket_name == destination_bucket_name and destination_prefix_normalized.startswith(source_prefix_normalized):
+                if (
+                    source_bucket_name == destination_bucket_name
+                    and destination_prefix_normalized.startswith(
+                        source_prefix_normalized
+                    )
+                ):
                     return {
                         "error": f"Cannot paste folder '{source_path}' to a sub-path of itself '{destination_path}'.",
                         "status": 400,
-                        "isFolder": True
+                        "isFolder": True,
                     }
 
                 # all blobs within the source folder
@@ -588,7 +607,11 @@ class Client(tornado.web.RequestHandler):
                     # If it's an empty folder (0-byte object marker), copy it
                     empty_folder_blob = source_bucket.blob(source_prefix_normalized)
                     if empty_folder_blob.exists() and empty_folder_blob.size == 0:
-                        new_blob = source_bucket.copy_blob(empty_folder_blob, destination_bucket, new_name=destination_prefix_normalized)
+                        new_blob = source_bucket.copy_blob(
+                            empty_folder_blob,
+                            destination_bucket,
+                            new_name=destination_prefix_normalized,
+                        )
                         return {
                             "name": new_blob.name,
                             "bucket": destination_bucket_name,
@@ -598,22 +621,27 @@ class Client(tornado.web.RequestHandler):
                             "message": "Empty folder copied successfully.",
                         }
                     else:
-                        return {"error": f"Folder '{source_path}' not found or empty.", "status": 404 , "isFolder": True}
-
+                        return {
+                            "error": f"Folder '{source_path}' not found or empty.",
+                            "status": 404,
+                            "isFolder": True,
+                        }
 
                 for blob in blobs_to_copy:
-                    relative_path = blob.name[len(source_prefix_normalized):]
+                    relative_path = blob.name[len(source_prefix_normalized) :]
                     new_blob_name = destination_prefix_normalized + relative_path
 
                     # Check for existence at destination before copying
                     if destination_bucket.blob(new_blob_name).exists():
                         return {
                             "error": f"A file/folder with name '{new_blob_name}' already exists in the destination.",
-                            "status": 409, # Conflict
-                            "isFolder": True
+                            "status": 409,  # Conflict
+                            "isFolder": True,
                         }
-                    source_bucket.copy_blob(blob, destination_bucket, new_name=new_blob_name)
-                
+                    source_bucket.copy_blob(
+                        blob, destination_bucket, new_name=new_blob_name
+                    )
+
                 return {
                     "message": f"Folder '{source_path}' and its contents copied to '{destination_path}'.",
                     "bucket": destination_bucket_name,
@@ -626,31 +654,45 @@ class Client(tornado.web.RequestHandler):
                 destination_blob = destination_bucket.blob(destination_path)
 
                 if not source_blob.exists():
-                    return {"error": f"Source file '{source_path}' not found.", "status": 404, "isFolder": False}
+                    return {
+                        "error": f"Source file '{source_path}' not found.",
+                        "status": 404,
+                        "isFolder": False,
+                    }
 
                 if destination_blob.exists():
                     return {
                         "error": f"A file with name '{destination_path}' already exists in the destination.",
                         "isFolder": False,
-                        "status": 409, # Conflict
+                        "status": 409,  # Conflict
                     }
-                new_blob = source_bucket.copy_blob(source_blob, destination_bucket, new_name=destination_path)
+                new_blob = source_bucket.copy_blob(
+                    source_blob, destination_bucket, new_name=destination_path
+                )
                 return {
                     "name": new_blob.name,
                     "bucket": new_blob.bucket.name,
                     "size": new_blob.size,
                     "contentType": new_blob.content_type,
-                    "timeCreated": (new_blob.time_created.isoformat() if new_blob.time_created else ""),
-                    "updated": (new_blob.updated.isoformat() if new_blob.updated else ""),
+                    "timeCreated": (
+                        new_blob.time_created.isoformat()
+                        if new_blob.time_created
+                        else ""
+                    ),
+                    "updated": (
+                        new_blob.updated.isoformat() if new_blob.updated else ""
+                    ),
                     "success": True,
                     "isFolder": False,
                     "status": 200,
                 }
 
         except Exception as e:
-            self.log.exception(f"Error copying from {source_path} to {destination_path}.")
+            self.log.exception(
+                f"Error copying from {source_path} to {destination_path}."
+            )
             return {"error": str(e), "status": 500}
-        
+
     async def move_blob(
         self,
         source_bucket_name: str,
@@ -664,11 +706,20 @@ class Client(tornado.web.RequestHandler):
         It uses a copy-then-delete strategy for all moves, as GCS does not support atomic cross-bucket moves.
         """
         try:
-            source_path = source_path.rstrip('/') if source_path.endswith("/") else source_path
-            destination_path = destination_path.rstrip('/') if destination_path.endswith("/") else destination_path
+            source_path = (
+                source_path.rstrip("/") if source_path.endswith("/") else source_path
+            )
+            destination_path = (
+                destination_path.rstrip("/")
+                if destination_path.endswith("/")
+                else destination_path
+            )
             # First, attempt to copy the file/folder
             copy_result = await self.copy_file(
-                source_bucket_name, source_path, destination_bucket_name, destination_path
+                source_bucket_name,
+                source_path,
+                destination_bucket_name,
+                destination_path,
             )
 
             if not copy_result.get("success"):
@@ -685,7 +736,7 @@ class Client(tornado.web.RequestHandler):
                     f"after successful copy to '{destination_path}' in '{destination_bucket_name}'. "
                     f"Error: {delete_result.get('error')}"
                 )
-                
+
             # Return the success message from the copy operation
             return copy_result
 
