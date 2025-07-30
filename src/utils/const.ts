@@ -28,18 +28,19 @@ export const API_HEADER_CONTENT_TYPE = 'application/json';
 export const STATUS_SUCCESS = 'SUCCEEDED';
 
 /** API endpoints */
-export const CREDENTIAL_ENDPOINT = "credentials"
-export const LOG_ENDPOINT = "log";
-export const LOGIN_ENDPOINT = "login"
-export const HEALTH_ENDPOINT = "health"
-export const LIST_BUCKETS_ENDPOINT = "api/storage/listBuckets"
-export const LIST_FILES_ENDPOINT = "api/storage/listFiles"
-export const LOAD_FILE_ENDPOINT = "api/storage/loadFile"
-export const CREATE_FOLDER_ENDPOINT = "api/storage/createFolder"
-export const SAVE_ENDPOINT = "api/storage/saveFile"
-export const DELETE_ENDPOINT = "api/storage/deleteFile"
-export const RENAME_ENDPOINT = "api/storage/renameFile"
-export const DOWNLOAD_ENDPOINT = "api/storage/downloadFile"
+export const CREDENTIAL_ENDPOINT = 'credentials';
+export const LOG_ENDPOINT = 'log';
+export const LOGIN_ENDPOINT = 'login';
+export const HEALTH_ENDPOINT = 'health';
+export const LIST_BUCKETS_ENDPOINT = 'api/storage/listBuckets';
+export const LIST_FILES_ENDPOINT = 'api/storage/listFiles';
+export const LOAD_FILE_ENDPOINT = 'api/storage/loadFile';
+export const CREATE_FOLDER_ENDPOINT = 'api/storage/createFolder';
+export const SAVE_ENDPOINT = 'api/storage/saveFile';
+export const DELETE_ENDPOINT = 'api/storage/deleteFile';
+export const RENAME_ENDPOINT = 'api/storage/renameFile';
+export const COPY_ENDPOINT = 'api/storage/copyFile';
+export const DOWNLOAD_ENDPOINT = 'api/storage/downloadFile';
 
 /** toolbar items ( Used in Name and tooltip ) */
 export const NEW_FOLDER = 'New Folder';
@@ -48,19 +49,19 @@ export const REFRESH = 'Refresh';
 export const TOGGLE_FILE_FILTER = 'Toggle File Filter';
 
 /** folder creation */
-export const DIRECTORY = 'directory'
-export const UNTITLED_DIRECTORY_NAME = 'UntitledFolder'
+export const DIRECTORY = 'directory';
+export const UNTITLED_DIRECTORY_NAME = 'UntitledFolder';
 
 /** file creation */
-export const FILE = 'file'
-export const UNTITLED_FILE_NAME = 'untitled'
-export const UNTITLED_FILE_EXT = '.txt'
+export const FILE = 'file';
+export const UNTITLED_FILE_NAME = 'untitled';
+export const UNTITLED_FILE_EXT = '.txt';
 
 /** notebook creation */
-export const NOTEBOOK = 'notebook'
-export const UNTITLED_NOTEBOOK_NAME = 'Untitled'
-export const UNTITLED_NOTEBOOK_EXT = '.ipynb'
+export const NOTEBOOK = 'notebook';
+export const UNTITLED_NOTEBOOK_NAME = 'Untitled';
+export const UNTITLED_NOTEBOOK_EXT = '.ipynb';
 
 /** Jupyter signals */
-export const DELETE_SIGNAL = 'delete'
-export const RENAME_SIGNAL = 'rename'
+export const DELETE_SIGNAL = 'delete';
+export const RENAME_SIGNAL = 'rename';

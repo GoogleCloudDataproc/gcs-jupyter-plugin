@@ -33,6 +33,7 @@ from gcs_jupyter_plugin.controllers.gcs import (
     SaveFileController,
     DeleteFileController,
     RenameFileController,
+    CopyFileController,
     DownloadFileController,
 )
 
@@ -64,7 +65,7 @@ class CredentialsHandler(APIHandler):
     @tornado.web.authenticated
     async def post(self):
         cached = await credentials.get_cached()
-        cached.pop("access_token", None) # Remove sensitive information
+        cached.pop("access_token", None)  # Remove sensitive information
         if cached["config_error"] == 1:
             self.log.exception("Error fetching credentials from gcloud")
         self.finish(json.dumps(cached))
@@ -77,8 +78,8 @@ class LogHandler(APIHandler):
         log_body = self.get_json_body()
         logger.log(log_body["level"], log_body["message"])
         self.finish({"status": "OK"})
-        
-        
+
+
 class HealthCheckHandler(APIHandler):
     @tornado.web.authenticated
     async def get(self):
@@ -108,6 +109,7 @@ def setup_handlers(web_app):
         "api/storage/saveFile": SaveFileController,
         "api/storage/deleteFile": DeleteFileController,
         "api/storage/renameFile": RenameFileController,
+        "api/storage/copyFile": CopyFileController,
         "api/storage/downloadFile": DownloadFileController,
     }
     handlers = [(full_path(name), handler) for name, handler in handlers_map.items()]

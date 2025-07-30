@@ -42,7 +42,6 @@ import {
   JUPYTER_SERVER_ERROR_MESSAGE,
   JUPYTER_SERVER_ERROR_TITLE
 } from './utils/message';
-import { authApi } from './utils/utils';
 
 /**
  * Initialization data for the gcs-jupyter-plugin extension.
@@ -80,13 +79,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
       driveName: gcsDrive.name,
       refreshInterval: 300000 // 5 mins
     });
-    const credentials = await authApi();
 
     const gcsBrowserWidget = new GcsBrowserWidget(
       gcsDrive,
       gcsBrowser,
-      themeManager,
-      credentials
+      themeManager
     );
     gcsDrive.setBrowserWidget(gcsBrowserWidget);
     documentManager.services.contents.addDrive(gcsDrive);

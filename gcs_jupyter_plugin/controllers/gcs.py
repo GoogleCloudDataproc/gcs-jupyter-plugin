@@ -20,7 +20,9 @@ from jupyter_server.base.handlers import APIHandler
 from gcs_jupyter_plugin import credentials
 from gcs_jupyter_plugin.services import gcs
 
-from gcs_jupyter_plugin.commons.constants import MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE
+from gcs_jupyter_plugin.commons.constants import (
+    MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE,
+)
 
 
 class ListBucketsController(APIHandler):
@@ -97,7 +99,9 @@ class SaveFileController(APIHandler):
 
             if not bucket or not destination_path:
                 self.set_status(400)
-                self.finish(json.dumps({"error": MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE}))
+                self.finish(
+                    json.dumps({"error": MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE})
+                )
                 return
 
             # Use the client to upload the content
@@ -127,7 +131,7 @@ class LoadFileController(APIHandler):
             bucket = data.get("bucket")
             file_path = data.get("path")
             file_format = data.get("format")
-            
+
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
@@ -214,20 +218,28 @@ class RenameFileController(APIHandler):
                 self.finish(json.dumps({"error": "Missing required parameters."}))
                 return
 
-            # Currently rename_blob only works within the same bucket
-            if old_bucket != new_bucket:
-                self.set_status(400)
-                self.finish(
-                    json.dumps({"error": "Cross-bucket renaming is not supported."})
-                )
-                return
-
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session
                 )
 
-                result = await client.rename_file(old_bucket, old_path, new_path)
+                if old_bucket != new_bucket:
+                    # In Jupyter lab, The UI does not allow cross-bucket renaming, and user can modify the name of the file alone.
+                    # Jupyter lab appends the prefix ( bucket and parent folder if any ) to the new path when renaming,
+                    # so we can safely assume that old_bucket and new_bucket are the same in the case of renaming.
+
+                    # Cut-paste functionality is using rename functionality internally, which allows cross-bucket renaming.
+                    # For cut-paste scenario, there is a chance that the old_bucket and new_bucket are different.
+                    # Google storage sdk (python) does not support cross-bucket renaming, so we need to handle this case.
+                    # So, when user performs cut-paste operation within the same bucket, we can allow the renaming operation.
+                    # If the user tries to rename a file across buckets, we will copy the file to the new bucket and delete the old file.
+                    # This is a workaround to support cross-bucket renaming, as the Google storage sdk (python) does not support cross-bucket renaming directly.
+                    result = await client.move_blob(
+                        old_bucket, old_path, new_bucket, new_path
+                    )
+                else:
+                    # If the old and new buckets are the same, we can use the rename operation
+                    result = await client.rename_file(old_bucket, old_path, new_path)
 
                 # Check for specific error conditions in the result
                 if "error" in result:
@@ -247,6 +259,50 @@ class RenameFileController(APIHandler):
             self.finish(json.dumps({"error": str(e)}))
 
 
+class CopyFileController(APIHandler):
+    @tornado.web.authenticated
+    async def post(self):
+        try:
+            data = json.loads(self.request.body)
+            source_bucket = data.get("sourceBucket")
+            source_path = data.get("sourcePath")
+            destination_bucket = data.get("destinationBucket")
+            destination_path = data.get("destinationPath")
+
+            if (
+                not source_bucket
+                or not source_path
+                or not destination_bucket
+                or not destination_path
+            ):
+                self.set_status(400)
+                self.finish(
+                    json.dumps({"error": MISSING_REQUIRED_PARAMETERS_ERROR_MESSAGE})
+                )
+                return
+
+            async with aiohttp.ClientSession() as client_session:
+                client = gcs.Client(
+                    await credentials.get_cached(), self.log, client_session
+                )
+
+                result = await client.copy_file(
+                    source_bucket, source_path, destination_bucket, destination_path
+                )
+
+                if "error" in result:
+                    self.set_status(result.get("status", 500))
+                    self.finish(json.dumps(result))
+                else:
+                    self.set_status(200)
+                    self.finish(json.dumps(result))
+
+        except Exception as e:
+            self.log.exception("Error copying file or folder")
+            self.set_status(500)
+            self.finish(json.dumps({"error": str(e)}))
+
+
 class DownloadFileController(APIHandler):
     @tornado.web.authenticated
     async def post(self):
@@ -256,7 +312,7 @@ class DownloadFileController(APIHandler):
             file_path = data.get("path")
             name = data.get("name")
             file_format = data.get("format")
-            
+
             async with aiohttp.ClientSession() as client_session:
                 client = gcs.Client(
                     await credentials.get_cached(), self.log, client_session

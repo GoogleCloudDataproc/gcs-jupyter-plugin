@@ -38,7 +38,7 @@ export interface IAuthCredentials {
 
 export const authApi = async (): Promise<IAuthCredentials | undefined> => {
   try {
-    const data = await requestAPI(CREDENTIAL_ENDPOINT , {
+    const data = await requestAPI(CREDENTIAL_ENDPOINT, {
       method: 'POST'
     });
     if (typeof data === 'object' && data !== null) {
