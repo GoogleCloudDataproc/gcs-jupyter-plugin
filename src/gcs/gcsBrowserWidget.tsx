@@ -372,9 +372,7 @@ export class GcsBrowserWidget extends Widget {
           if (credentials.login_error === 1) {
             // Login error
             const loginContainer = this.createErrorContainer();
-
             const loginText = this._createLoginErrorTextElement();
-
             const loginButton = this._createLoginButton();
 
             loginButton.onclick = () => {
@@ -387,7 +385,7 @@ export class GcsBrowserWidget extends Widget {
               });
             };
 
-            loginContainer.appendChild(this._createGoogleIconContainer());
+            loginButton.appendChild(this._createGoogleIconContainer());
             loginContainer.appendChild(loginText);
             loginContainer.appendChild(loginButton);
             this.node.appendChild(loginContainer);
