@@ -34,6 +34,61 @@ const openBucket = async (page, bucketName = testBucket) => {
   await waitForProgressBarToDisappear(page);
 };
 
+async function createAndRenameFolder(page, folderName) {
+  await page.getByRole('button', { name: 'New Folder' }).click();
+  await waitForProgressBarToDisappear(page);
+
+  const newFolder = page.getByRole('listitem', {
+    name: 'Name: UntitledFolder'
+  });
+  await expect(newFolder).toBeVisible();
+
+  await newFolder.getByRole('textbox').fill(folderName);
+  await page
+    .getByRole('region', { name: 'side panel content' })
+    .getByRole('textbox')
+    .press('Enter');
+  await waitForProgressBarToDisappear(page);
+
+  const renamedFolder = page.getByRole('listitem', {
+    name: `Name: ${folderName}`
+  });
+  await expect(renamedFolder).toBeVisible();
+}
+
+async function deleteFolderOrFile(page, folderOrFileName) {
+  await page
+    .getByRole('listitem', { name: `Name: ${folderOrFileName}` })
+    .click({ button: 'right' });
+  await page.getByText('Delete', { exact: true }).click();
+  await page.getByRole('button', { name: 'Delete' }).click();
+  await waitForProgressBarToDisappear(page);
+  await page.waitForTimeout(5000);
+  await expect(
+    page.getByRole('listitem', { name: `Name: ${folderOrFileName}` })
+  ).not.toBeVisible();
+}
+
+async function createFile(page) {
+  await page
+    .locator("//ul[@class='jp-DirListing-content']")
+    .first()
+    .click({ button: 'right' });
+  await page.getByText('New File', { exact: true }).click();
+  await waitForProgressBarToDisappear(page);
+  const newFile = page.getByRole('listitem', {
+    name: 'Name: untitled.txt'
+  });
+  await expect(newFile).toBeVisible();
+  return newFile;
+}
+
+async function pasteContent(page) {
+  await page.getByRole('list').click({ button: 'right' });
+  await page.getByText('Paste', { exact: true }).click();
+  await waitForProgressBarToDisappear(page);
+}
+
 const resetBucket = async page => {
   while (true) {
     const listItems = page.getByRole('listitem');
@@ -45,6 +100,7 @@ const resetBucket = async page => {
     await page.getByText('Delete', { exact: true }).click();
     await page.getByRole('button', { name: 'Delete' }).click();
     await waitForProgressBarToDisappear(page);
+    await page.waitForTimeout(5000);
   }
 };
 
@@ -74,6 +130,7 @@ test.describe('GCS tests', () => {
       ).toBeVisible();
     }
   });
+  
   test('Handle folder/file creation outside bucket', async ({ page }) => {
     test.setTimeout(timeout);
 
@@ -146,38 +203,11 @@ test.describe('GCS tests', () => {
       if (visible) {
         await openBucket(page);
 
-        // Create a folder
-        await page.getByRole('button', { name: 'New Folder' }).click();
-
-        await waitForProgressBarToDisappear(page);
-
-        const newFolder = page.getByRole('listitem', {
-          name: 'Name: UntitledFolder'
-        });
-        await expect(newFolder).toBeVisible();
-
-        // Rename a folder
-        await newFolder.getByRole('textbox').fill(folderName);
-        await page
-          .getByRole('region', { name: 'side panel content' })
-          .getByRole('textbox')
-          .press('Enter');
-        await waitForProgressBarToDisappear(page);
-        await expect(
-          page.getByRole('listitem', { name: `Name: ${folderName}` })
-        ).toBeVisible();
+        // Create and rename a folder
+        await createAndRenameFolder(page, folderName);
 
         // Delete a folder
-        await page
-          .getByRole('listitem', { name: `Name: ${folderName}` })
-          .click({ button: 'right' });
-        await page.getByText('Delete', { exact: true }).click();
-        await page.getByRole('button', { name: 'Delete' }).click();
-        await waitForProgressBarToDisappear(page);
-        await page.waitForTimeout(5000);
-        await expect(
-          page.getByRole('listitem', { name: `Name: ${folderName}` })
-        ).not.toBeVisible();
+        await deleteFolderOrFile(page, folderName);
 
         // Right-click to create and delete folder
         await page
@@ -207,7 +237,7 @@ test.describe('GCS tests', () => {
 
         await page.getByRole('button', { name: 'Delete' }).click();
         await waitForProgressBarToDisappear(page);
-         await page.waitForTimeout(5000);
+        await page.waitForTimeout(5000);
         await expect(
           page.getByRole('listitem', { name: 'Name: UntitledFolder' })
         ).not.toBeVisible();
@@ -228,19 +258,10 @@ test.describe('GCS tests', () => {
         await openBucket(page);
 
         // Right-click and create a file
-        await page
-          .locator("//ul[@class='jp-DirListing-content']")
-          .first()
-          .click({ button: 'right' });
-        await page.getByText('New File', { exact: true }).click();
-        await waitForProgressBarToDisappear(page);
-        const newFile = page.getByRole('listitem', {
-          name: 'Name: untitled.txt'
-        });
-        await expect(newFile).toBeVisible();
+        const newTextFile = await createFile(page);
 
         // Rename a file
-        await newFile.getByRole('textbox').fill(fileName);
+        await newTextFile.getByRole('textbox').fill(fileName);
         await page
           .getByRole('region', { name: 'side panel content' })
           .getByRole('textbox')
@@ -251,16 +272,7 @@ test.describe('GCS tests', () => {
         ).toBeVisible();
 
         // Delete a file
-        await page
-          .getByRole('listitem', { name: `Name: ${fileName}` })
-          .click({ button: 'right' });
-        await page.getByText('Delete', { exact: true }).click();
-        await page.getByRole('button', { name: 'Delete' }).click();
-        await waitForProgressBarToDisappear(page);
-        await page.waitForTimeout(5000);
-        await expect(
-          page.getByRole('listitem', { name: `Name: ${fileName}` })
-        ).not.toBeVisible();
+        await deleteFolderOrFile(page, fileName);
       } else {
         console.log('Test bucket is not present');
       }
@@ -278,22 +290,12 @@ test.describe('GCS tests', () => {
         await openBucket(page);
 
         // Right-click and create a file
-        await page
-          .locator("//ul[@class='jp-DirListing-content']")
-          .first()
-          .click({ button: 'right' });
-        await page.getByText('New File', { exact: true }).click();
-        await waitForProgressBarToDisappear(page);
-        const newFile = page.getByRole('listitem', {
-          name: 'Name: untitled.txt'
-        });
+        const newTextFile = await createFile(page);
         await page
           .getByRole('region', { name: 'side panel content' })
           .getByRole('textbox')
           .press('Enter');
-        await waitForProgressBarToDisappear(page);
-        await expect(newFile).toBeVisible();
-        await newFile.dblclick();
+        await newTextFile.dblclick();
         await page
           .locator('div.lm-Widget.jp-Spinner')
           .waitFor({ state: 'detached' });
@@ -310,7 +312,7 @@ test.describe('GCS tests', () => {
         await page.waitForTimeout(15000);
         await page.getByTitle('Close untitled.txt').click();
         await page.waitForTimeout(2000);
-        await newFile.dblclick();
+        await newTextFile.dblclick();
         await page
           .locator('div.lm-Widget.jp-Spinner')
           .waitFor({ state: 'detached' });
@@ -324,16 +326,7 @@ test.describe('GCS tests', () => {
         await page.waitForTimeout(2000);
 
         // Delete a file
-        await page
-          .getByRole('listitem', { name: `Name: untitled.txt` })
-          .click({ button: 'right' });
-        await page.getByText('Delete', { exact: true }).click();
-        await page.getByRole('button', { name: 'Delete' }).click();
-        await waitForProgressBarToDisappear(page);
-        await page.waitForTimeout(3000);
-        await expect(
-          page.getByRole('listitem', { name: `Name: untitled.txt` })
-        ).not.toBeVisible();
+        await deleteFolderOrFile(page, 'untitled.txt');
       } else {
         console.log('Test bucket is not present');
       }
@@ -351,24 +344,14 @@ test.describe('GCS tests', () => {
         await openBucket(page);
 
         // Right-click and create a file
-        await page
-          .locator("//ul[@class='jp-DirListing-content']")
-          .first()
-          .click({ button: 'right' });
-        await page.getByText('New File', { exact: true }).click();
-        await waitForProgressBarToDisappear(page);
-        const newFile = page.getByRole('listitem', {
-          name: 'Name: untitled.txt'
-        });
+        const newTextFile = await createFile(page);
         await page
           .getByRole('region', { name: 'side panel content' })
           .getByRole('textbox')
           .press('Enter');
-        await page.waitForTimeout(5000);
-        await expect(newFile).toBeVisible();
-        await newFile.dblclick();
+        await newTextFile.dblclick();
 
-        // Wait till the file opened
+        // Verify file discard validation
         await page
           .locator("//div[@class='jp-SpinnerContent']")
           .waitFor({ state: 'detached' });
@@ -385,13 +368,12 @@ test.describe('GCS tests', () => {
         expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
         await page.getByRole('button', { name: 'Discard' }).click();
         await page.waitForTimeout(5000);
-        await newFile.dblclick();
 
-        // Wait till the file opened
+        // Verify the content is not present
+        await newTextFile.dblclick();
         await page
           .locator("//div[@class='jp-SpinnerContent']")
           .waitFor({ state: 'detached' });
-
         const content = await page
           .getByLabel('notebook content')
           .getByRole('textbox')
@@ -401,18 +383,116 @@ test.describe('GCS tests', () => {
         await page.waitForTimeout(5000);
 
         // Delete a file
-        await page
-          .getByRole('listitem', { name: `Name: untitled.txt` })
-          .click({ button: 'right' });
-        await page.getByText('Delete', { exact: true }).click();
-        await page.getByRole('button', { name: 'Delete' }).click();
-        await waitForProgressBarToDisappear(page);
-        await page.waitForTimeout(3000);
-        await expect(
-          page.getByRole('listitem', { name: `Name: untitled.txt` })
-        ).not.toBeVisible();
+        await deleteFolderOrFile(page, 'untitled.txt');
       } else {
         console.log('Test bucket is not present');
+      }
+    }
+  });
+
+  test('Copy a file and paste at diffrent location', async ({ page }) => {
+    test.setTimeout(timeout);
+    if (await openGCSTab(page)) {
+      const bucket = page.getByRole('listitem', {
+        name: `Name: ${testBucket}`
+      });
+      const visible = await bucket.isVisible();
+      if (visible) {
+        await openBucket(page);
+
+        // Create and rename a folder
+        const testFolderName = 'testFolder1';
+        await createAndRenameFolder(page, testFolderName);
+
+        // Open folder
+        await page
+          .getByRole('listitem', { name: `Name: ${testFolderName}` })
+          .dblclick();
+        await waitForProgressBarToDisappear(page);
+
+        // Right-click and create a file
+        const newTextFile = await createFile(page);
+
+        // Copy the file
+        await newTextFile.click({ button: 'right' });
+        await page.getByText('Copy', { exact: true }).click();
+        await page.getByText(testBucket).click();
+        await waitForProgressBarToDisappear(page);
+
+        // Paste the file and verify
+        await pasteContent(page);
+        await expect(newTextFile).toBeVisible();
+        await resetBucket(page);
+      }
+    }
+  });
+
+  test('Cut a folder and paste at diffrent location', async ({ page }) => {
+    test.setTimeout(timeout);
+    if (await openGCSTab(page)) {
+      const bucket = page.getByRole('listitem', {
+        name: `Name: ${testBucket}`
+      });
+      const visible = await bucket.isVisible();
+      if (visible) {
+        await openBucket(page);
+
+        // Create and rename source folder
+        const sourceFolderName = 'testFolder2';
+        await createAndRenameFolder(page, 'testFolder2');
+
+        // Open a folder
+        await page
+          .getByRole('listitem', { name: `Name: ${sourceFolderName}` })
+          .dblclick();
+        await waitForProgressBarToDisappear(page);
+
+        // Right-click and create a file
+        const newTextFile = await createFile(page);
+
+        // Go back to bucket level
+        await page.getByText(testBucket).click();
+        await waitForProgressBarToDisappear(page);
+
+        // Create and rename destination folder
+        const destinationFolderName = 'testFolder3';
+        await createAndRenameFolder(page, destinationFolderName);
+
+        // Cut a folder
+        await page
+          .getByRole('listitem', { name: `Name: ${sourceFolderName}` })
+          .click({ button: 'right' });
+        await page.getByText('Cut', { exact: true }).click();
+
+        // Paste inside another folder
+        await page
+          .getByRole('listitem', { name: `Name: ${destinationFolderName}` })
+          .dblclick();
+        await waitForProgressBarToDisappear(page);
+        await pasteContent(page);
+
+        // Verify the cut folder and file is visible
+        await expect(
+          page.getByRole('listitem', { name: `Name: ${sourceFolderName}` })
+        ).toBeVisible();
+
+        await page
+          .getByRole('listitem', { name: `Name: ${sourceFolderName}` })
+          .dblclick();
+        await waitForProgressBarToDisappear(page);
+
+        await expect(newTextFile).toBeVisible();
+        await page.getByText(destinationFolderName).click();
+        await waitForProgressBarToDisappear(page);
+
+        await page.getByText(testBucket).click();
+        await waitForProgressBarToDisappear(page);
+
+        await expect(
+          page.getByRole('listitem', { name: `Name: ${sourceFolderName}` })
+        ).not.toBeVisible();
+
+        await resetBucket(page);
       }
     }
   });
