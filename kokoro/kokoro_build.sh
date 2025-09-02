@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Fail on any error.
-set -e
+set -euo pipefail
 
 # Display commands being run.
 # WARNING: please only enable 'set -x' if necessary for debugging, and be very
@@ -24,10 +24,10 @@ gcloud config set compute/region us-central1
 
 # Install dependencies.
 sudo apt-get update
-sudo apt-get --assume-yes install python3 python3-pip nodejs python3-venv
+sudo apt-get --assume-yes --no-install-recommends install python3 python3-pip nodejs python3-venv
 
 # Install latest jupyter lab and build.
-python -m venv latest
+python3 -m venv latest
 source latest/bin/activate
 pip install jupyterlab build
 
@@ -38,6 +38,7 @@ cd "${KOKORO_ARTIFACTS_DIR}/github/gcs-jupyter-plugin"
 jlpm install
 jlpm build
 # Also build python packages to dist/
+rm -rf dist
 python -m build
 
 # install the build
