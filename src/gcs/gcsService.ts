@@ -32,7 +32,7 @@ export class GcsService {
   /**
    * Translate a Jupyter Lab file path into tokens.  IE.
    *   gs:bucket-name/directory/file.ipynb
-   * (Note that this isn't exactly a gsutil compatible URI)
+   * (Note that this isn't exactly a gcloud storage compatible URI)
    * Would translate to:
    * {
    *   bucket: 'bucket-name',
