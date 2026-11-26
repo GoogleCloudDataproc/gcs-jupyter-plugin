@@ -788,11 +788,6 @@ export class GCSDrive implements Contents.IDrive {
         });
 
         if (response?.status === 200) {
-          await GcsService.deleteFile({
-            bucket: oldPath.bucket,
-            path: oldPath.path
-          });
-
           if (isOldPathMeetsFilename) {
             // Emitting the Signal ( If file is opened, JupyterLab updates name in the editor. )
             this._fileChanged.emit({
